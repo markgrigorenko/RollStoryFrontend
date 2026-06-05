@@ -1,5 +1,7 @@
 import type { components } from '@/shared/api/generated/schema'
+import { apiSkillIndexToCreatorId } from '@/shared/lib/dndProficiencyLabelsRu'
 import {
+  fillAbilitySkillRows,
   portraitUrlForCharacterName,
   type AbilityColumn,
   type CampaignCharacterListItem,
@@ -68,6 +70,16 @@ function statToAbilityColumn(
   }
 }
 
+function mapSkillIndexesToCreatorIds(indexes: string[] | undefined): string[] {
+  if (!indexes?.length) return []
+  const out: string[] = []
+  for (const index of indexes) {
+    const id = apiSkillIndexToCreatorId(index)
+    if (id) out.push(id)
+  }
+  return out
+}
+
 function tagsToQuestTags(tags: string[] | undefined): QuestTag[] {
   if (!tags?.length) return []
   return tags.map((label, i) => ({
@@ -109,7 +121,12 @@ export function characterDetailToSheet(detail: CharacterDetailResponse): Charact
     detail.wisdom,
     detail.charisma,
   ]
-  const abilities = ABILITY_STYLES.map((meta, i) => statToAbilityColumn(meta, stats[i]!))
+  const abilityColumns = ABILITY_STYLES.map((meta, i) => statToAbilityColumn(meta, stats[i]!))
+  const abilities = fillAbilitySkillRows(
+    abilityColumns,
+    mapSkillIndexesToCreatorIds(detail.skillIndexes),
+    detail.level
+  )
   const subtitle = `${detail.class} · ${detail.race} · ур. ${detail.level}`
 
   return {

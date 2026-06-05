@@ -97,10 +97,22 @@ function normalizeIndex(index: string): string {
   return index.trim().toLowerCase().replace(/_/g, '-')
 }
 
-function localizeSkillByIndex(index: string): string | null {
+function resolveCreatorSkillId(index: string): string | null {
   const norm = normalizeIndex(index).replace(/^skill-/, '')
   const creatorId = SKILL_INDEX_ALIASES[norm] ?? norm
-  return SKILL_LABEL_BY_ID[creatorId] ?? SKILL_LABEL_BY_ID[norm] ?? null
+  if (creatorId in SKILL_LABEL_BY_ID) return creatorId
+  if (norm in SKILL_LABEL_BY_ID) return norm
+  return null
+}
+
+function localizeSkillByIndex(index: string): string | null {
+  const creatorId = resolveCreatorSkillId(index)
+  return creatorId ? SKILL_LABEL_BY_ID[creatorId] ?? null : null
+}
+
+/** API skillIndexes → id из CREATOR_SKILL_OPTIONS */
+export function apiSkillIndexToCreatorId(index: string): string | null {
+  return resolveCreatorSkillId(index)
 }
 
 function localizeByIndex(index: string): string | null {

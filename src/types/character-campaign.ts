@@ -491,9 +491,9 @@ function buildAbilitiesFromDraftScores(scores: CharacterAbilityScores): AbilityC
   })
 }
 
-function fillAllSkillsForDraft(
+/** Заполняет строки навыков в колонках характеристик (как в превью мастера создания). */
+export function fillAbilitySkillRows(
   columns: AbilityColumn[],
-  scores: CharacterAbilityScores,
   proficientSkillIds: string[],
   characterLevel: number
 ): AbilityColumn[] {
@@ -515,13 +515,21 @@ function fillAllSkillsForDraft(
   for (const opt of sorted) {
     const col = byAbility[opt.ability]
     if (!col) continue
-    const score = scores[opt.ability] ?? 8
-    const abilityMod = Math.floor((score - 10) / 2)
+    const abilityMod = Math.floor((col.score - 10) / 2)
     const total = abilityMod + (proficient.has(opt.id) ? pb : 0)
     col.skills.push({ name: opt.label, bonus: formatSignedBonus(total) })
   }
 
   return cols
+}
+
+function fillAllSkillsForDraft(
+  columns: AbilityColumn[],
+  _scores: CharacterAbilityScores,
+  proficientSkillIds: string[],
+  characterLevel: number
+): AbilityColumn[] {
+  return fillAbilitySkillRows(columns, proficientSkillIds, characterLevel)
 }
 
 export function createCharacterSheetFromDraft(

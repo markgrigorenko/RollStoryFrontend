@@ -27,7 +27,7 @@ import { readQuestMetadata, resolveQuestDisplay, writeQuestMetadata } from '@/sh
 import { useActiveCampaignStore } from '@/stores/activeCampaign'
 import { useCampaignCharactersStore } from '@/stores/campaignCharacters'
 import { useCampaignQuestsStore } from '@/stores/campaignQuests'
-import { DEMO_QUEST_LIST, isLocalOnlyQuestId } from '@/types/quest-campaign'
+import { DEMO_QUEST_LIST, isLocalOnlyQuestId, type CampaignQuestListItem, type QuestSheet } from '@/types/quest-campaign'
 import {
   DEFAULT_LOCATION_CARD_IMAGE_URL,
   DEMO_LOCATION_FALLBACK_ID,
@@ -320,10 +320,52 @@ const attachableCampaignCharacters = computed(() => {
   })
 })
 
+function collectAttachableCampaignQuests(
+  curLocationId: string,
+  quests: CampaignQuestListItem[],
+  sheets: Record<string, QuestSheet>,
+  alreadyLinkedTitles: Set<string>,
+  alreadyLinkedIds: Set<string>
+): QuestSuggestion[] {
+  const out: QuestSuggestion[] = []
+  const seen = new Set<string>()
+  for (const item of quests) {
+    const sh = sheets[item.id]
+    if (!sh) continue
+    if (alreadyLinkedIds.has(item.id)) continue
+    if (sh.locationLinks.some((l) => l.locationId === curLocationId)) continue
+    const title = (sh.displayTitle ?? item.listName).trim()
+    if (!title) continue
+    const key = title.toLowerCase()
+    if (seen.has(key) || alreadyLinkedTitles.has(key)) continue
+    seen.add(key)
+    out.push({ title, description: sh.description?.trim() || undefined })
+  }
+  return out
+}
+
 const questSuggestionsForAttach = computed((): QuestSuggestion[] => {
-  const suggestions = collectQuestSuggestions(locationSheets.value)
+  const curId = selectedId.value
   const currentTitles = new Set(relationQuestsList.value.map((x) => x.title.trim().toLowerCase()))
-  return suggestions.filter((s) => !currentTitles.has(s.title.toLowerCase()))
+  const currentQuestIds = new Set(
+    relationQuestsList.value.map((x) => x.attachedQuestId).filter(Boolean) as string[]
+  )
+
+  const fromCampaign = collectAttachableCampaignQuests(
+    curId,
+    questList.value,
+    questSheets.value,
+    currentTitles,
+    currentQuestIds
+  )
+
+  const seen = new Set(fromCampaign.map((s) => s.title.toLowerCase()))
+  const fromLocations = collectQuestSuggestions(locationSheets.value).filter((s) => {
+    const key = s.title.toLowerCase()
+    return !currentTitles.has(key) && !seen.has(key)
+  })
+
+  return [...fromCampaign, ...fromLocations]
 })
 
 watch(attachKind, (k) => {
@@ -944,7 +986,7 @@ onUnmounted(() => document.removeEventListener('keydown', onAttachEscape))
 
             <!-- Квест -->
             <div v-if="attachKind === 'quest'" class="cl-attach-overlay__pane">
-              <h3 class="cl-attach-overlay__subheading">Уже упомянутые в кампании</h3>
+              <h3 class="cl-attach-overlay__subheading">Квесты кампании</h3>
               <ul v-if="questSuggestionsForAttach.length" class="cl-attach-overlay__choices">
                 <li v-for="(qx, qi) in questSuggestionsForAttach" :key="'qs-' + qi">
                   <button type="button" class="cl-attach-overlay__choice" @click="attachQuestSuggestion(qx)">
@@ -953,7 +995,7 @@ onUnmounted(() => document.removeEventListener('keydown', onAttachEscape))
                   </button>
                 </li>
               </ul>
-              <p v-else class="cl-attach-overlay__muted-inline">Нет общих названий для выбора — создайте квест ниже.</p>
+              <p v-else class="cl-attach-overlay__muted-inline">Нет доступных квестов — создайте новый ниже.</p>
 
               <h3 class="cl-attach-overlay__subheading cl-attach-overlay__subheading--divider">Новый квест</h3>
               <form class="cl-attach-overlay__form" @submit.prevent="attachQuestManual">
