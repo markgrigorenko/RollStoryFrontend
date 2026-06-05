@@ -12,18 +12,18 @@ async function assetUrlToFile(assetUrl: string): Promise<File> {
   return new File([blob], `portrait.${ext}`, { type })
 }
 
-/** Загружает портрет демо-персонажа на сервер после complete, если имя известно. */
+/** Загружает портрет демо-персонажа на сервер до complete, если имя известно. */
 export async function uploadDemoCharacterPortraitIfKnown(
   campaignId: string,
   characterId: string,
   characterName: string,
   signal?: AbortSignal
-): Promise<void> {
+): Promise<string | null> {
   const assetUrl = getDemoCharacterPortraitAssetUrl(characterName)
-  if (!assetUrl) return
+  if (!assetUrl) return null
 
   const file = await assetUrlToFile(assetUrl)
-  await uploadFile(
+  const uploaded = await uploadFile(
     {
       campaignId,
       kind: 'character',
@@ -32,4 +32,5 @@ export async function uploadDemoCharacterPortraitIfKnown(
     },
     signal
   )
+  return uploaded.url?.trim() || null
 }

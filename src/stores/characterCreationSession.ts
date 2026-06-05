@@ -34,6 +34,8 @@ export type CharacterCreateRewindableStep = keyof typeof REWIND_TARGET_BY_WIZARD
 export const useCharacterCreationSessionStore = defineStore('characterCreationSession', () => {
   const apiActive = ref(false)
   const sessionId = ref<string | null>(null)
+  /** characterId выдаётся на start — нужен для upload до complete. */
+  const draftCharacterId = ref<string | null>(null)
   const raceOptions = ref<PickListItem[]>([])
   const classOptions = ref<PickListItem[]>([])
   const proficiencyGroups = ref<ProficiencyPickGroup[]>([])
@@ -49,6 +51,7 @@ export const useCharacterCreationSessionStore = defineStore('characterCreationSe
   function reset() {
     apiActive.value = false
     sessionId.value = null
+    draftCharacterId.value = null
     raceOptions.value = []
     classOptions.value = []
     proficiencyGroups.value = []
@@ -77,6 +80,7 @@ export const useCharacterCreationSessionStore = defineStore('characterCreationSe
     try {
       const res = await startCharacterCreation(campaignId, { locale: 'ru' }, signal)
       sessionId.value = res.sessionId
+      draftCharacterId.value = res.characterId
       raceOptions.value = res.availableRaces.map((r) => ({ id: r.index, label: r.name }))
       classOptions.value = res.availableClasses.map((c) => ({ id: c.index, label: c.name }))
       apiActive.value = true
@@ -206,7 +210,7 @@ export const useCharacterCreationSessionStore = defineStore('characterCreationSe
     }
   }
 
-  async function finish(signal?: AbortSignal): Promise<string | null> {
+  async function finish(avatarLink?: string, signal?: AbortSignal): Promise<string | null> {
     if (!sessionId.value) return null
     const campaignId = useActiveCampaignStore().campaignId
     if (!campaignId) return null
@@ -214,9 +218,13 @@ export const useCharacterCreationSessionStore = defineStore('characterCreationSe
     submitting.value = true
     lastError.value = null
     try {
+      const link = avatarLink?.trim()
       const res = await completeCharacterCreation(
         campaignId,
-        { sessionId: sessionId.value },
+        {
+          sessionId: sessionId.value,
+          ...(link ? { avatar_link: link } : {}),
+        },
         signal
       )
       const characterId = res.characterId
@@ -258,6 +266,7 @@ export const useCharacterCreationSessionStore = defineStore('characterCreationSe
   return {
     apiActive,
     sessionId,
+    draftCharacterId,
     raceOptions,
     classOptions,
     proficiencyGroups,

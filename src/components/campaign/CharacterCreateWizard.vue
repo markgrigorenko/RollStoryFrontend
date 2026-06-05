@@ -315,17 +315,15 @@ async function onPrimaryAction() {
   }
   avatarUploadError.value = ''
   if (hasSession.value) {
-    const characterId = await creationStore.finish()
-    if (!characterId) return
-
     let uploadError: string | undefined
     let avatarUrl: string | undefined
     if (draft.value.pendingAvatarFile) {
       avatarUploading.value = true
       try {
         const campaignId = await useActiveCampaignStore().ensureCampaignId()
-        if (!campaignId) {
-          throw new Error('Не удалось определить кампанию для загрузки аватара')
+        const characterId = creationStore.draftCharacterId
+        if (!campaignId || !characterId) {
+          throw new Error('Не удалось определить кампанию или персонажа для загрузки аватара')
         }
         const uploaded = await uploadFile({
           campaignId,
@@ -336,12 +334,16 @@ async function onPrimaryAction() {
         avatarUrl = uploaded.url
       } catch (e) {
         uploadError =
-          e instanceof Error ? e.message : 'Персонаж создан, но аватар не загрузился.'
+          e instanceof Error ? e.message : 'Аватар не загрузился — персонаж будет создан без фото.'
         avatarUploadError.value = uploadError
       } finally {
         avatarUploading.value = false
       }
     }
+
+    const characterId = await creationStore.finish(avatarUrl)
+    if (!characterId) return
+
     emit('complete', { characterId, avatarUploadError: uploadError, avatarUrl })
     return
   }

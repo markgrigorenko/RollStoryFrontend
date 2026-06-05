@@ -208,16 +208,27 @@ async function createBootstrapCharacter(
     )
   }
 
-  const completeRes = await completeCharacterCreation(campaignId, { sessionId }, signal)
-  const characterId = completeRes.characterId ?? null
+  const characterId = startRes.characterId
+  let avatarLink: string | undefined
   if (characterId) {
     try {
-      await uploadDemoCharacterPortraitIfKnown(campaignId, characterId, seed.name, signal)
+      avatarLink =
+        (await uploadDemoCharacterPortraitIfKnown(campaignId, characterId, seed.name, signal)) ??
+        undefined
     } catch (e) {
       console.warn(BOOTSTRAP_LOG, `портрет не загружен для «${seed.name}»`, e)
     }
   }
-  return characterId
+
+  const completeRes = await completeCharacterCreation(
+    campaignId,
+    {
+      sessionId,
+      ...(avatarLink ? { avatar_link: avatarLink } : {}),
+    },
+    signal
+  )
+  return completeRes.characterId ?? characterId ?? null
 }
 
 /** Кампания пуста, если на сервере нет локаций и персонажей (квесты живут в привязках к локациям). */
