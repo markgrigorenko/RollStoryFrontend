@@ -1,0 +1,2515 @@
+openapi: 3.0.0
+info:
+  version: 0.0.1
+  title: RollStory Backend
+
+servers:
+  - url: https://api.rollstory.org/v1
+    description: Production
+
+paths:
+  /db/campaign:
+    post:
+      summary: Создание кампании
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCampaignRequest"
+      responses:
+        "201":
+          description: Успешное создание игры
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateCampaignResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaigns:
+    get:
+      summary: Получение списка кампаний пользователя
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+      responses:
+        "200":
+          description: Список кампаний
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCampaignsResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}:
+    delete:
+      summary: Удаление кампании
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      responses:
+        "204":
+          description: Кампания успешно удалена
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Нет прав на удаление
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Кампания не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character/relation:
+    post:
+      summary: Создание связи между персонажами
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCharacterRelationRequest"
+      responses:
+        "201":
+          description: Связь успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateCharacterRelationResponse"
+        "400":
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Персонаж не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Связь уже существует
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      summary: Удаление связи между персонажами
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteCharacterRelationRequest"
+      responses:
+        "204":
+          description: Связь успешно удалена
+        "400":
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character/{characterId}:
+    get:
+      summary: Получение детальной информации о персонаже
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "200":
+          description: Детальная информация о персонаже
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterDetailResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Персонаж не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    patch:
+      summary: Редактирование персонажа (с теми же правилами, что при создании)
+      description: >
+        Полная замена данных персонажа (только владелец кампании). В отличие от
+        мастера создания — без сессии и шагов: передаётся вся спека сразу и
+        проходит те же правила 5e, что при создании.
+
+
+        Тело — UpdateCharacterRequest, передаётся целиком:
+
+        - baseStats — БАЗОВЫЕ характеристики ДО применения ASI (point-buy: 8–15,
+          ровно 27 очков). На сервере ASI применяется поверх, и пересчитываются
+          модификаторы, HP, КД (AC) и инициатива.
+
+        - asi — распределение ASI (валидируется по классу и уровню).
+
+        - proficiencyChoices — владения в пределах лимитов класса.
+
+        - raceIndex / classIndex — должны существовать в справочнике 5e.
+
+        - tags, description, avatar_link — метаданные (avatar_link — URL из
+          POST /files/upload?kind=character).
+
+
+        Неизменяемое: campaignId, created_by и флаг is_npc сохраняются.
+
+        Ответ — CharacterDetailResponse (персонаж + связи), как у GET.
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/CharacterId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCharacterRequest"
+      responses:
+        "200":
+          description: Персонаж обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterDetailResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character:
+    get:
+      summary: Получение списка персонажей кампании
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      responses:
+        "200":
+          description: Список персонажей
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCharactersResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/signin:
+    post:
+      summary: Регистрация
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SigninRequest"
+      responses:
+        "201":
+          description: Успешная регистрация пользователя
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SigninResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/refresh:
+    post:
+      summary: Обновление jwt пары
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/X-Device-Id"
+      responses:
+        "200":
+          description: Успешный ответ с JWT токенами
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/login:
+    post:
+      summary: Логин
+      parameters:
+        - $ref: "#/components/parameters/X-Device-Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Успешный ответ с JWT токенами
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Неверные учетные данные
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/verify-email:
+    get:
+      summary: Подтверждение email по ссылке из письма
+      description: >
+        Публичный эндпоинт. Принимает одноразовый токен из письма
+        подтверждения, активирует пользователя и редиректит на UI.
+
+
+        На успех: 302 на verify_email.success_url.
+
+        На ошибку: 302 на verify_email.error_url?reason=<code>, где code —
+        одно из: empty, not_found, used, expired, internal.
+      tags:
+        - Auth
+      parameters:
+        - in: query
+          name: token
+          required: true
+          description: Сырой токен подтверждения email
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Редирект на UI (успех или ошибка с reason в query)
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL для редиректа
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # hc - healthcheck
+  /hc/ping:
+    get:
+      summary: Проверка готовности сервиса к запуску
+      tags:
+        - Test
+      responses:
+        "200":
+          description: Сервис успешно запустился
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /hc/ready:
+    get:
+      summary: Проверка работоспособности сервиса
+      tags:
+        - Test
+      responses:
+        "200":
+          description: Сервис работает штатно
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /db/campaign/{campaignId}/character/create/start:
+    post:
+      summary: Начало создания персонажа
+      description: >
+        Старт пошагового мастера создания персонажа (только владелец кампании).
+
+
+        Порядок шагов (каждый возвращает sessionId и следующий шаг):
+
+        1. POST .../create/start — начало, отдаёт sessionId, characterId и
+           справочники (доступные расы/классы).
+
+        2. POST .../create/basic_info — имя, описание, раса, класс, уровень.
+
+        3. POST .../create/point_buy — базовые характеристики по системе
+           point-buy (8–15, ровно 27 очков).
+
+        4. POST .../create/asi — распределение ASI (по классу и уровню;
+           каждый бонус = 2 очка: +2 в одну или +1 в две характеристики).
+
+        5. POST .../create/proficiencies — выбор владений в пределах лимитов класса.
+
+        6. POST .../create/complete — финализация: персонаж сохраняется в БД.
+
+        Откатиться на шаг назад можно через POST .../create/rewind.
+
+
+        Аватар: characterId выдаётся уже на этом шаге, поэтому изображение
+        можно загрузить ещё в процессе создания —
+        POST /files/upload?campaign_id=...&kind=character&character_id=...
+        получить URL и передать его в complete (avatar_link).
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartCharacterCreationRequest"
+      responses:
+        "200":
+          description: Успешное начало создания персонажа
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartCharacterCreationResponse"
+        "400":
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character/create/basic_info:
+    post:
+      summary: Сохранение базовой информации персонажа
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BasicInfoRequest"
+      responses:
+        "200":
+          description: Базовая информация сохранена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicInfoResponse"
+        "400":
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character/create/point_buy:
+    post:
+      summary: Сохранение распределения характеристик по системе Point Buy
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PointBuyRequest"
+      responses:
+        "200":
+          description: Характеристики успешно сохранены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointBuyResponse"
+        "400":
+          description: Неверное распределение очков
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Доступ запрещен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character/create/asi:
+    post:
+      summary: Распределение ASI (Ability Score Improvements)
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ASIRequest"
+      responses:
+        "200":
+          description: ASI успешно распределены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ASIResponse"
+        "400":
+          description: Неверное распределение ASI
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character/create/proficiencies:
+    post:
+      summary: Выбор владений (proficiencies)
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProficienciesRequest"
+      responses:
+        "200":
+          description: Владения успешно выбраны
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProficienciesResponse"
+        "400":
+          description: Неверный выбор владений
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character/create/rewind:
+    post:
+      summary: Откат на предыдущий шаг создания персонажа
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewindStepRequest"
+      responses:
+        "204":
+          description: Шаг успешно откатен
+        "400":
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/character/create/complete:
+    post:
+      summary: Завершение создания персонажа
+      description: >
+        Финальный шаг мастера: данные сессии собираются в персонажа и
+        сохраняются в БД. Возвращает characterId (тот же, что выдан на start).
+
+
+        avatar_link — опционально: URL изображения, загруженного во время
+        создания через POST /files/upload?kind=character. Если не передан,
+        персонаж создаётся без аватара (его можно добавить позже через PATCH).
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteCharacterRequest"
+      responses:
+        "201":
+          description: Персонаж успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompleteCharacterResponse"
+        "400":
+          description: Неверные данные
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /files/upload:
+    post:
+      summary: Загрузка изображения в S3
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - in: query
+          name: campaign_id
+          required: true
+          description: Идентификатор кампании
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - in: query
+          name: kind
+          required: true
+          description: Тип сущности, для которой грузится файл
+          schema:
+            type: string
+            enum: [location, character]
+        - in: query
+          name: location_id
+          required: false
+          description: Обязателен при kind=location
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - in: query
+          name: character_id
+          required: false
+          description: Обязателен при kind=character
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Файл загружен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadFileResponse"
+        "400":
+          description: Ошибка валидации запроса
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Нет доступа к кампании
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Файл превышает лимит
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Неподдерживаемый тип файла
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/location:
+    post:
+      summary: Создание локации
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLocationRequest"
+      responses:
+        "201":
+          description: Локация создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/locations:
+    get:
+      summary: Список локаций кампании (с координатами для карты)
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+      responses:
+        "200":
+          description: Список локаций
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListLocationsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/location/{locationId}:
+    get:
+      summary: Детали локации со списком привязанных персонажей и квестов
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Детали локации
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationDetailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    patch:
+      summary: Частичное обновление локации (включая перенос пина по x,y)
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLocationRequest"
+      responses:
+        "200":
+          description: Локация обновлена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      summary: Удаление локации
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "204":
+          description: Локация удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/location/{locationId}/character/{characterId}:
+    post:
+      summary: Привязка персонажа к локации
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "204":
+          description: Связь создана
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      summary: Отвязка персонажа от локации
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "204":
+          description: Связь удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/location/{locationId}/quest/{questId}:
+    post:
+      summary: Привязка квеста к локации
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/QuestId"
+      responses:
+        "204":
+          description: Связь создана
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      summary: Отвязка квеста от локации
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/QuestId"
+      responses:
+        "204":
+          description: Связь удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/quest:
+    post:
+      summary: Создание квеста
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuestRequest"
+      responses:
+        "201":
+          description: Квест создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/quests:
+    get:
+      summary: Список квестов кампании
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+      responses:
+        "200":
+          description: Список квестов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListQuestsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/quest/{questId}:
+    get:
+      summary: Детали квеста (локации, игровые персонажи, НПС)
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+      responses:
+        "200":
+          description: Детали квеста
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestDetailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    patch:
+      summary: Частичное обновление квеста
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQuestRequest"
+      responses:
+        "200":
+          description: Квест обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      summary: Удаление квеста
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+      responses:
+        "204":
+          description: Квест удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/quest/{questId}/activate:
+    post:
+      summary: Активация квеста
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+      responses:
+        "204":
+          description: Квест активирован
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/quest/{questId}/deactivate:
+    post:
+      summary: Деактивация квеста
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+      responses:
+        "204":
+          description: Квест деактивирован
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/quest/{questId}/location/{locationId}:
+    post:
+      summary: Привязка локации к квесту
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "204":
+          description: Связь создана
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      summary: Отвязка локации от квеста
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "204":
+          description: Связь удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /db/campaign/{campaignId}/quest/{questId}/character/{characterId}:
+    post:
+      summary: Привязка персонажа к квесту (PC или НПС — по is_npc)
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "204":
+          description: Связь создана
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      summary: Отвязка персонажа от квеста
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/QuestId"
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "204":
+          description: Связь удалена
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+components:
+  # GENERIC RESPONSES (ERRORS, etc...)
+  responses:
+    ServiceUnavailable:
+      description: Сервис недоступен
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    InternalServerError:
+      description: Непредвиденная внутренняя ошибка сервера.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    BadRequest:
+      description: Неверный запрос
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Unauthorized:
+      description: Не авторизован
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Forbidden:
+      description: Нет прав
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    NotFound:
+      description: Не найдено
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Conflict:
+      description: Конфликт состояния
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  # GENERIC HEADERS
+  parameters:
+    X-User-Id:
+      in: header
+      name: X-User-Id
+      description: Идентификатор пользователя (UUID)
+      required: true
+      schema:
+        $ref: "#/components/schemas/UUID"
+    Authorization:
+      in: header
+      name: Authorization
+      description: Заголовок авторизации с Bearer токеном
+      required: true
+      schema:
+        type: string
+        example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    X-Device-Id:
+      in: header
+      name: X-Device-Id
+      description: Уникальный идентификатор устройства (UUID)
+      required: true
+      schema:
+        $ref: "#/components/schemas/UUID"
+    CampaignId:
+      in: path
+      name: campaignId
+      required: true
+      description: Идентификатор кампании
+      schema:
+        $ref: "#/components/schemas/UUID"
+    CharacterId:
+      in: path
+      name: characterId
+      required: true
+      description: Идентификатор персонажа
+      schema:
+        $ref: "#/components/schemas/UUID"
+    LocationId:
+      in: path
+      name: locationId
+      required: true
+      description: Идентификатор локации
+      schema:
+        $ref: "#/components/schemas/UUID"
+    QuestId:
+      in: path
+      name: questId
+      required: true
+      description: Идентификатор квеста
+      schema:
+        $ref: "#/components/schemas/UUID"
+
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+
+    # Specific HTTP Responses
+    OkResponse:
+      type: object
+      description: Успешный ответ, без наполнения
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "Internal server error"
+
+    UploadFileResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: Публичный URL загруженного файла
+
+    # REQUESTS
+    CreateCampaignRequest:
+      type: object
+      required:
+        - title
+        - description
+      properties:
+        title:
+          type: string
+          description: Название кампании
+        description:
+          type: string
+          description: Описание кампании
+
+    SigninRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email пользователя; основной логин и адрес для письма с подтверждением
+        password:
+          type: string
+          description: Пароль пользователя
+          format: password
+          minLength: 8
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email пользователя (логин)
+        password:
+          type: string
+          description: Пароль пользователя
+          format: password
+
+    # RESPONSE
+    CreateCampaignResponse:
+      type: object
+      required:
+        - campaignId
+      properties:
+        campaignId:
+          $ref: "#/components/schemas/UUID"
+
+    SigninResponse:
+      type: object
+      required:
+        - userId
+      properties:
+        userId:
+          $ref: "#/components/schemas/UUID"
+        verification_token:
+          type: string
+          description: >
+            Сырой токен подтверждения email. Возвращается ВРЕМЕННО, пока не
+            подключена реальная отправка письма (issue #29). После подключения
+            SMTP это поле будет удалено из ответа.
+
+    LoginResponse:
+      type: object
+      required:
+        - userId
+        - accessToken
+        - refreshToken
+      properties:
+        userId:
+          $ref: "#/components/schemas/UUID"
+        accessToken:
+          type: string
+          description: access jwt token
+        refreshToken:
+          type: string
+          description: refresh jwt token
+
+    CampaignItem:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        title:
+          type: string
+          description: Название кампании
+        description:
+          type: string
+          description: Описание кампании
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата создания
+
+    ListCampaignsResponse:
+      type: object
+      required:
+        - campaigns
+      properties:
+        campaigns:
+          type: array
+          items:
+            $ref: "#/components/schemas/CampaignItem"
+
+    ListCharactersResponse:
+      type: object
+      required:
+        - characters
+      properties:
+        characters:
+          type: array
+          items:
+            $ref: "#/components/schemas/CharacterItem"
+
+    CharacterItem:
+      type: object
+      required:
+        - id
+        - name
+        - race
+        - class
+        - level
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+        race:
+          type: string
+        class:
+          type: string
+        level:
+          type: integer
+
+    CharacterDetailResponse:
+      type: object
+      required:
+        - id
+        - campaignId
+        - isNpc
+        - name
+        - race
+        - class
+        - level
+        - strength
+        - dexterity
+        - constitution
+        - intelligence
+        - wisdom
+        - charisma
+        - armorClass
+        - initiative
+        - speed
+        - hitPoints
+        - createdBy
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        campaignId:
+          $ref: "#/components/schemas/UUID"
+        isNpc:
+          type: boolean
+        name:
+          type: string
+        race:
+          type: string
+        class:
+          type: string
+        level:
+          type: integer
+        avatarLink:
+          type: string
+        description:
+          type: string
+        strength:
+          $ref: "#/components/schemas/StatDetail"
+        dexterity:
+          $ref: "#/components/schemas/StatDetail"
+        constitution:
+          $ref: "#/components/schemas/StatDetail"
+        intelligence:
+          $ref: "#/components/schemas/StatDetail"
+        wisdom:
+          $ref: "#/components/schemas/StatDetail"
+        charisma:
+          $ref: "#/components/schemas/StatDetail"
+        skillIndexes:
+          type: array
+          items:
+            type: string
+        armorClass:
+          type: integer
+        initiative:
+          type: integer
+        speed:
+          type: integer
+        hitPoints:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        createdBy:
+          $ref: "#/components/schemas/UUID"
+        relations:
+          type: array
+          items:
+            $ref: "#/components/schemas/CharacterRelation"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CharacterRelation:
+      type: object
+      required:
+        - id
+        - connectedCharacterId
+        - relationship
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        connectedCharacterId:
+          $ref: "#/components/schemas/UUID"
+        relationship:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    StatDetail:
+      type: object
+      required:
+        - value
+        - modificator
+      properties:
+        value:
+          type: integer
+        modificator:
+          type: integer
+
+    # CHARACTER CREATION
+    StartCharacterCreationRequest:
+      type: object
+      required:
+        - locale
+      properties:
+        locale:
+          type: string
+          description: Язык локализации (ru, en)
+          enum: [ru, en]
+
+    BasicInfoRequest:
+      type: object
+      required:
+        - sessionId
+        - name
+        - raceIndex
+        - classIndex
+        - level
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+          description: Имя персонажа
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          description: Описание персонажа (предыстория)
+          maxLength: 2000
+        raceIndex:
+          type: string
+          description: Индекс выбранной расы
+        classIndex:
+          type: string
+          description: Индекс выбранного класса
+        level:
+          type: integer
+          description: Уровень персонажа
+          minimum: 1
+          maximum: 20
+
+    BasicInfoResponse:
+      type: object
+      required:
+        - sessionId
+        - nextStep
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        nextStep:
+          type: string
+          description: Следующий шаг создания персонажа
+
+    PointBuyRequest:
+      type: object
+      required:
+        - sessionId
+        - baseStats
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        baseStats:
+          $ref: "#/components/schemas/Stats"
+
+    PointBuyResponse:
+      type: object
+      required:
+        - sessionId
+        - nextStep
+        - totalAsiPoints
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        nextStep:
+          type: string
+          description: Следующий шаг создания персонажа
+        totalAsiPoints:
+          type: integer
+          description: Общее количество ASI очков для распределения (0 если ASI пропущен)
+        proficiencyChoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProficiencyChoice"
+          description: Доступные выборы владений (заполняется при пропуске ASI)
+
+    ASIRequest:
+      type: object
+      required:
+        - sessionId
+        - asi
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        asi:
+          type: array
+          items:
+            $ref: "#/components/schemas/ASIAllocation"
+          description: Распределение ASI очков
+
+    ASIResponse:
+      type: object
+      required:
+        - sessionId
+        - nextStep
+        - proficiencyChoices
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        nextStep:
+          type: string
+          description: Следующий шаг создания персонажа
+        proficiencyChoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProficiencyChoice"
+
+    ASIAllocation:
+      type: object
+      required:
+        - statIndex
+        - points
+      properties:
+        statIndex:
+          type: string
+          description: Индекс характеристики для улучшения
+        points:
+          type: integer
+          description: Количество очков (+1 или +2)
+          enum: [1, 2]
+
+    ProficienciesRequest:
+      type: object
+      required:
+        - sessionId
+        - choices
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        choices:
+          $ref: "#/components/schemas/ProficiencyChoicesData"
+
+    ProficienciesResponse:
+      type: object
+      required:
+        - sessionId
+        - nextStep
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        nextStep:
+          type: string
+          description: Следующий шаг создания персонажа
+
+    ProficiencyChoicesData:
+      type: object
+      properties:
+        skillIndexes:
+          type: array
+          items:
+            type: string
+          description: Индексы выбранных навыков
+        toolIndexes:
+          type: array
+          items:
+            type: string
+          description: Индексы выбранных инструментов
+        musicalInstrumentIndexes:
+          type: array
+          items:
+            type: string
+          description: Индексы выбранных музыкальных инструментов
+
+    CreateCharacterRelationRequest:
+      type: object
+      required:
+        - characterId
+        - connectedCharacterId
+        - relationship
+      properties:
+        characterId:
+          $ref: "#/components/schemas/UUID"
+        connectedCharacterId:
+          $ref: "#/components/schemas/UUID"
+        relationship:
+          type: string
+          description: Описание связи между персонажами
+
+    CreateCharacterRelationResponse:
+      type: object
+      required:
+        - id
+        - characterId
+        - connectedCharacterId
+        - relationship
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        characterId:
+          $ref: "#/components/schemas/UUID"
+        connectedCharacterId:
+          $ref: "#/components/schemas/UUID"
+        relationship:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    DeleteCharacterRelationRequest:
+      type: object
+      required:
+        - characterId
+        - connectedCharacterId
+      properties:
+        characterId:
+          $ref: "#/components/schemas/UUID"
+        connectedCharacterId:
+          $ref: "#/components/schemas/UUID"
+
+    RewindStepRequest:
+      type: object
+      required:
+        - sessionId
+        - targetStep
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        targetStep:
+          type: string
+          description: Шаг, на который нужно вернуться
+          enum: [basic_info, point_buy, asi, proficiency]
+
+    CompleteCharacterRequest:
+      type: object
+      required:
+        - sessionId
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        avatar_link:
+          type: string
+          description: URL аватара, загруженного во время создания (опционально)
+
+    UpdateCharacterRequest:
+      type: object
+      description: >
+        Полная спека персонажа. Прогоняется через те же правила 5e, что и
+        при создании (point-buy, ASI по классу/уровню, лимиты proficiency,
+        существование расы/класса). baseStats — БАЗОВЫЕ значения до ASI.
+      required:
+        - name
+        - raceIndex
+        - classIndex
+        - level
+        - baseStats
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+        raceIndex:
+          type: string
+        classIndex:
+          type: string
+        level:
+          type: integer
+          minimum: 1
+          maximum: 20
+        baseStats:
+          $ref: "#/components/schemas/Stats"
+        asi:
+          type: array
+          items:
+            $ref: "#/components/schemas/ASIAllocation"
+        proficiencyChoices:
+          $ref: "#/components/schemas/ProficiencyChoicesData"
+        tags:
+          type: array
+          items:
+            type: string
+        avatar_link:
+          type: string
+
+    CompleteCharacterResponse:
+      type: object
+      required:
+        - characterId
+      properties:
+        characterId:
+          $ref: "#/components/schemas/UUID"
+
+    Stats:
+      type: object
+      required:
+        - strength
+        - dexterity
+        - constitution
+        - intelligence
+        - wisdom
+        - charisma
+      properties:
+        strength:
+          type: integer
+          minimum: 8
+          maximum: 15
+          description: Сила
+        dexterity:
+          type: integer
+          minimum: 8
+          maximum: 15
+          description: Ловкость
+        constitution:
+          type: integer
+          minimum: 8
+          maximum: 15
+          description: Телосложение
+        intelligence:
+          type: integer
+          minimum: 8
+          maximum: 15
+          description: Интеллект
+        wisdom:
+          type: integer
+          minimum: 8
+          maximum: 15
+          description: Мудрость
+        charisma:
+          type: integer
+          minimum: 8
+          maximum: 15
+          description: Харизма
+
+    StartCharacterCreationResponse:
+      type: object
+      required:
+        - sessionId
+        - characterId
+        - nextStep
+        - availableRaces
+        - availableClasses
+        - dictionary
+      properties:
+        sessionId:
+          $ref: "#/components/schemas/UUID"
+        characterId:
+          $ref: "#/components/schemas/UUID"
+        nextStep:
+          type: string
+          description: Следующий шаг создания персонажа
+        availableRaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/RaceCompact"
+        availableClasses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassCompact"
+        dictionary:
+          $ref: "#/components/schemas/Dictionary"
+
+    # Словарь с детальной информацией по индексам
+    Dictionary:
+      type: object
+      properties:
+        languages:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/LanguageDetails"
+        abilityScores:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/AbilityScoreDetails"
+        traits:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/TraitDetails"
+        proficiencies:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ProficiencyDetails"
+        equipment:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/EquipmentDetails"
+        subclasses:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/SubclassDetails"
+        subraces:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/SubraceDetails"
+
+    # Детали для словаря
+    LanguageDetails:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    AbilityScoreDetails:
+      type: object
+      required:
+        - name
+        - shortName
+      properties:
+        name:
+          type: string
+        shortName:
+          type: string
+        description:
+          type: string
+
+    TraitDetails:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        proficiencies:
+          type: array
+          items:
+            type: string
+          description: Индексы proficiencies
+
+    ProficiencyDetails:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+
+    EquipmentDetails:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    SubclassDetails:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    SubraceDetails:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        abilityBonuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/AbilityBonusCompact"
+        traits:
+          type: array
+          items:
+            type: string
+          description: Индексы traits
+
+    # Компактные структуры (ссылки по индексам)
+    RaceCompact:
+      type: object
+      required:
+        - index
+        - name
+        - description
+        - speed
+        - size
+      properties:
+        index:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        alignment:
+          type: string
+        age:
+          type: string
+        size:
+          type: string
+        sizeDescription:
+          type: string
+        speed:
+          type: integer
+        languages:
+          type: array
+          items:
+            type: string
+          description: Индексы языков (детали в dictionary.languages)
+        optionalLanguages:
+          type: array
+          items:
+            type: string
+          description: Индексы опциональных языков
+        abilityBonuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/AbilityBonusCompact"
+        optionalAbilityBonuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/AbilityBonusCompact"
+        traits:
+          type: array
+          items:
+            type: string
+          description: Индексы черт (детали в dictionary.traits)
+        subraces:
+          type: array
+          items:
+            type: string
+          description: Индексы подрас (детали в dictionary.subraces)
+
+    AbilityBonusCompact:
+      type: object
+      required:
+        - abilityIndex
+        - value
+      properties:
+        abilityIndex:
+          type: string
+          description: Индекс характеристики (детали в dictionary.abilityScores)
+        value:
+          type: integer
+
+    ClassCompact:
+      type: object
+      required:
+        - index
+        - name
+        - hitDie
+      properties:
+        index:
+          type: string
+        name:
+          type: string
+        hitDie:
+          type: integer
+        defaultProficiencies:
+          type: array
+          items:
+            type: string
+          description: Индексы владений (детали в dictionary.proficiencies)
+        optionalProficiencies:
+          type: array
+          items:
+            type: string
+          description: Индексы опциональных владений
+        savingThrows:
+          type: array
+          items:
+            type: string
+          description: Индексы характеристик для спасбросков
+        defaultEquipment:
+          type: array
+          items:
+            $ref: "#/components/schemas/EquipmentCompact"
+        optionalEquipment:
+          type: array
+          items:
+            $ref: "#/components/schemas/EquipmentCompact"
+        subclasses:
+          type: array
+          items:
+            type: string
+          description: Индексы подклассов (детали в dictionary.subclasses)
+
+    EquipmentCompact:
+      type: object
+      required:
+        - equipmentIndex
+        - quantity
+      properties:
+        equipmentIndex:
+          type: string
+          description: Индекс снаряжения (детали в dictionary.equipment)
+        quantity:
+          type: integer
+
+    ProficiencyChoice:
+      type: object
+      required:
+        - desc
+        - choose
+        - type
+        - from
+      properties:
+        desc:
+          type: string
+          description: Описание выбора
+        choose:
+          type: integer
+          description: Количество элементов для выбора
+        type:
+          type: string
+          description: Тип выбора
+        from:
+          $ref: "#/components/schemas/OptionSet"
+
+    OptionSet:
+      type: object
+      required:
+        - optionSetType
+      properties:
+        optionSetType:
+          type: string
+          description: Тип набора опций
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProficiencyOption"
+        equipmentCategory:
+          type: object
+          properties:
+            index:
+              type: string
+            name:
+              type: string
+
+    ProficiencyOption:
+      type: object
+      required:
+        - optionType
+      properties:
+        optionType:
+          type: string
+          description: Тип опции (reference, choice, counted_reference)
+        item:
+          type: object
+          properties:
+            index:
+              type: string
+            name:
+              type: string
+        of:
+          type: object
+          properties:
+            index:
+              type: string
+            name:
+              type: string
+        choice:
+          $ref: "#/components/schemas/ProficiencyChoice"
+        count:
+          type: integer
+
+    # ── Locations ──────────────────────────────────────────────────────────
+    CreateLocationRequest:
+      type: object
+      required: [title, x, y]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        image_url:
+          type: string
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        tags:
+          type: array
+          items:
+            type: string
+
+    UpdateLocationRequest:
+      type: object
+      description: PATCH-семантика — переданы только поля, которые надо изменить.
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        image_url:
+          type: string
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        tags:
+          type: array
+          items:
+            type: string
+
+    LocationResponse:
+      type: object
+      required: [id, campaign_id, title, x, y, created_by, created_at, updated_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        campaign_id:
+          $ref: "#/components/schemas/UUID"
+        title:
+          type: string
+        description:
+          type: string
+        image_url:
+          type: string
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        tags:
+          type: array
+          items:
+            type: string
+        created_by:
+          $ref: "#/components/schemas/UUID"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LocationDetailResponse:
+      type: object
+      required: [location, character_ids, quest_ids]
+      properties:
+        location:
+          $ref: "#/components/schemas/LocationResponse"
+        character_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/UUID"
+        quest_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/UUID"
+
+    ListLocationsResponse:
+      type: object
+      required: [locations]
+      properties:
+        locations:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocationResponse"
+
+    CreateQuestRequest:
+      type: object
+      required: [title, description]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    UpdateQuestRequest:
+      type: object
+      description: PATCH-семантика — переданы только поля, которые надо изменить.
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    QuestResponse:
+      type: object
+      required: [id, campaign_id, title, description, is_active, created_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        campaign_id:
+          $ref: "#/components/schemas/UUID"
+        title:
+          type: string
+        description:
+          type: string
+        is_active:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+
+    QuestDetailResponse:
+      type: object
+      required: [quest, location_ids, character_ids, npc_ids]
+      properties:
+        quest:
+          $ref: "#/components/schemas/QuestResponse"
+        location_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/UUID"
+        character_ids:
+          type: array
+          description: Игровые персонажи (is_npc = false)
+          items:
+            $ref: "#/components/schemas/UUID"
+        npc_ids:
+          type: array
+          description: НПС (is_npc = true)
+          items:
+            $ref: "#/components/schemas/UUID"
+
+    ListQuestsResponse:
+      type: object
+      required: [quests]
+      properties:
+        quests:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestResponse"

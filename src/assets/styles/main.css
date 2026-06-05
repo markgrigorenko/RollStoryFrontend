@@ -1,0 +1,107 @@
+@import 'tailwindcss';
+@plugin 'daisyui';
+
+@import './base.css';
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-weight: normal;
+}
+
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
+
+@media (min-width: 1024px) {
+  body {
+    display: flex;
+    place-items: center;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 0 2rem;
+  }
+}
+
+/* Страница карты: полноэкранный .app-wrapper — иначе #app в 2 колонки / max-width ломают высоту и Leaflet даёт 0×0. */
+#app:has(> .app-wrapper--fullscreen) {
+  display: flex !important;
+  flex-direction: column;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 100vh;
+  width: 100%;
+  grid-template-columns: none !important;
+}
+
+body:has(> #app > .app-wrapper--fullscreen) {
+  display: block !important;
+  min-height: 100vh;
+}
+
+/* Страницы входа / регистрации: без отступов #app и без лишнего скролла по 100vh */
+html:has(> body > #app > .app-wrapper--auth),
+body:has(> #app > .app-wrapper--auth) {
+  display: block !important;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: #1a1a1a;
+}
+
+#app:has(> .app-wrapper--auth) {
+  display: block !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  grid-template-columns: none !important;
+  background: #1a1a1a;
+}
+
+/*
+ * vite-plugin-vue-devtools (только dev): ореол якоря вылезает ниже viewport
+ * до первого resize — выглядит как «подбородок» с иконкой V внизу экрана.
+ */
+html:has(> body > #app > .app-wrapper--auth) .app-wrapper--auth,
+html:has(> body > #app > .app-wrapper--auth) .login-page,
+html:has(> body > #app > .app-wrapper--auth) .auth-page {
+  top: 0 !important;
+  right: 0 !important;
+  left: 0 !important;
+  bottom: -4px !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: calc(100dvh + 4px) !important;
+}
+
+html:has(> body > #app > .app-wrapper--auth) #__vue-devtools-container__,
+html:has(> body > #app > .app-wrapper--auth) .vue-devtools__anchor {
+  display: none !important;
+}
+
+/* vite-plugin-vue-devtools: плавающий якорь даёт артефакт внизу экрана в dev. */
+#__vue-devtools-container__ {
+  display: none !important;
+}
+
+.vue-devtools__anchor--glowing {
+  display: none !important;
+}
