@@ -151,7 +151,8 @@ function localizePlainEnglishName(name: string): string | null {
     localizeSkillByIndex(slug) ??
     MUSICAL_INSTRUMENTS_RU[slug] ??
     TOOLS_RU[slug] ??
-    LANGUAGES_RU[slug]
+    LANGUAGES_RU[slug] ??
+    null
   )
 }
 
