@@ -24,11 +24,10 @@ export function parseVerifyEmailReasonFromLocation(location: string): string | n
   }
 }
 
+// Определяем ошибочный редирект по наличию query-параметра `reason`.
+// На success_url его нет, на error_url он всегда есть (см. openapi: empty,
+// not_found, used, expired, internal). Это устойчиво к смене путей в
+// `verify_email.success_url` / `verify_email.error_url` на стороне бэка.
 export function isVerifyEmailErrorLocation(location: string): boolean {
-  try {
-    const url = new URL(location, window.location.origin)
-    return url.pathname.includes('/signin/error')
-  } catch {
-    return location.includes('/signin/error')
-  }
+  return parseVerifyEmailReasonFromLocation(location) !== null
 }
