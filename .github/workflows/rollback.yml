@@ -1,0 +1,53 @@
+name: Rollback
+
+# Откатывает frontend на указанный SHA. У фронта нет миграций/состояния — откат
+# тривиален и обратим (накатил → не понравилось → откатил обратно).
+#
+# Использование: GitHub UI → Actions → Rollback → Run workflow → ввести target_sha.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: "SHA коммита, на который откатываемся (full 40-char hash)"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-frontend-prod
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback to ${{ inputs.target_sha }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sanity-check: образ с таким тегом был запушен. Если нет — не откатываемся.
+      - name: Validate SHA exists in registry
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | \
+            docker login ${{ secrets.REGISTRY_URL }} \
+              -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin
+          if ! docker manifest inspect \
+              "${{ secrets.REGISTRY_URL }}/rollstory-frontend:${{ inputs.target_sha }}" >/dev/null 2>&1; then
+            echo "❌ Образ rollstory-frontend:${{ inputs.target_sha }} не найден в registry"
+            exit 1
+          fi
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Rollback frontend on VPS
+        run: |
+          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "bash /opt/rollstory/frontend/deploy/scripts/rollback.sh ${{ inputs.target_sha }}"
+
+      - name: Verify
+        run: ./deploy/scripts/verify.sh "https://${{ secrets.DOMAIN }}/healthz"

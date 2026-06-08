@@ -38,6 +38,11 @@ const router = createRouter({
       component: () => import('../views/ConfirmEmailView.vue'),
     },
     {
+      path: '/register/verify',
+      name: 'verifyEmail',
+      component: () => import('../views/RegisterVerifyView.vue'),
+    },
+    {
       path: '/map',
       name: 'map',
       component: () => import('../views/MapView.vue'),
@@ -51,6 +56,7 @@ router.beforeEach((to) => {
     'login',
     'register',
     'confirmEmail',
+    'verifyEmail',
   ])
   const isPublic =
     (typeof to.name === 'string' && publicRouteNames.has(to.name)) ||

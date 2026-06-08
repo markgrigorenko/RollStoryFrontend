@@ -2,13 +2,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import logoLoginUrl from '@/assets/brand/logo-login.svg'
-import { HttpError, signUp, verifyEmail } from '@/shared/api'
+import { HttpError, signUp } from '@/shared/api'
 import AuthBrandLink from '@/shared/ui/AuthBrandLink.vue'
 import { isValidEmail } from '@/shared/lib/isValidEmail'
-import {
-  clearPendingEmailVerification,
-  savePendingEmailVerification,
-} from '@/shared/lib/pendingEmailVerification'
+import { savePendingEmailVerification } from '@/shared/lib/pendingEmailVerification'
 
 const router = useRouter()
 const username = ref('')
@@ -86,31 +83,11 @@ async function handleRegister() {
 
     if (attemptId !== registerAttempt) return
 
-    if (res.verification_token) {
-      const result = await verifyEmail(res.verification_token, signal)
-      if (attemptId !== registerAttempt) return
-
-      if (
-        result.status === 'success' ||
-        (result.status === 'error' && result.reason === 'used')
-      ) {
-        clearPendingEmailVerification()
-        await router.push({ name: 'login', query: { verified: '1' } })
-        return
-      }
-      savePendingEmailVerification({
-        userId: res.userId,
-        email,
-        verificationToken: res.verification_token,
-      })
-      await router.push({
-        name: 'confirmEmail',
-        query: { reason: result.reason },
-      })
-      return
-    }
-
-    savePendingEmailVerification({ userId: res.userId, email })
+    // Бэк отдаёт только userId; подтверждение делает сам пользователь по
+    // ссылке из письма (страница /register/verify). Здесь — только запомнить
+    // email для экрана «проверьте почту» и кнопки «отправить ещё раз».
+    // res.userId не сохраняем — он нам ни для чего не нужен на этом флоу.
+    savePendingEmailVerification({ email })
     await router.push({ name: 'confirmEmail' })
   } catch (err) {
     if (attemptId !== registerAttempt) return

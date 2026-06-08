@@ -1,33 +1,35 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import logoLoginUrl from '@/assets/brand/logo-login.svg'
-import { HttpError, verifyEmail } from '@/shared/api'
+import { HttpError, resendVerification } from '@/shared/api'
 import {
   clearPendingEmailVerification,
   getPendingEmailVerification,
 } from '@/shared/lib/pendingEmailVerification'
-import { verifyEmailErrorMessage, isVerifyEmailAlreadyUsedReason } from '@/shared/lib/verifyEmailErrors'
 import AuthBrandLink from '@/shared/ui/AuthBrandLink.vue'
 
-type Phase = 'loading' | 'awaiting' | 'error'
+// Пост-регистрационный экран «проверьте почту». Сам токен из письма
+// обрабатывает отдельная страница /register/verify (RegisterVerifyView).
+// Здесь — только напоминание + повторная отправка письма через
+// POST /auth/resend-verification (email+password как «лёгкая авторизация»;
+// ответ всегда 204, чтобы нельзя было перечислять пользователей).
 
 const router = useRouter()
-const route = useRoute()
 
-const phase = ref<Phase>('loading')
 const pendingEmail = ref<string | null>(null)
-const storedVerificationToken = ref<string | null>(null)
-const submitError = ref<string | null>(null)
+const resendPassword = ref('')
+const resendOpen = ref(false)
+const resendLoading = ref(false)
+const resendInfo = ref<string | null>(null)
+const resendError = ref<string | null>(null)
 const resendCountdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
-const canRetry = computed(
-  () => phase.value === 'error' && Boolean(storedVerificationToken.value)
-)
+const RESEND_COOLDOWN_SECONDS = 60
 
 function startCountdown() {
-  resendCountdown.value = 59
+  resendCountdown.value = RESEND_COOLDOWN_SECONDS
   if (countdownTimer) clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {
     resendCountdown.value -= 1
@@ -38,85 +40,55 @@ function startCountdown() {
   }, 1000)
 }
 
-async function submitVerification(token: string) {
-  phase.value = 'loading'
-  submitError.value = null
-  try {
-    const result = await verifyEmail(token)
-    if (result.status === 'error') {
-      if (isVerifyEmailAlreadyUsedReason(result.reason)) {
-        clearPendingEmailVerification()
-        await router.push({ name: 'login', query: { verified: '1' } })
-        return
-      }
-      submitError.value = verifyEmailErrorMessage(result.reason)
-      phase.value = 'error'
-      return
-    }
-    clearPendingEmailVerification()
-    await router.push({ name: 'login', query: { verified: '1' } })
-  } catch (err) {
-    if (err instanceof HttpError) {
-      submitError.value = err.message || 'Не удалось подтвердить email. Попробуйте позже.'
-    } else {
-      submitError.value = 'Не удалось подтвердить email. Попробуйте позже.'
-    }
-    phase.value = 'error'
-  }
-}
-
-async function handleRetry() {
-  const token = storedVerificationToken.value
-  if (!token) return
-  await submitVerification(token)
-}
-
-function handleResend() {
+function handleToggleResend() {
   if (resendCountdown.value > 0) return
-  // Повторная отправка появится после подключения SMTP (issue #29).
-  startCountdown()
+  resendError.value = null
+  resendInfo.value = null
+  resendOpen.value = !resendOpen.value
+}
+
+async function submitResend() {
+  const email = pendingEmail.value
+  if (!email) return
+  if (resendCountdown.value > 0 || resendLoading.value) return
+  if (resendPassword.value.length === 0) {
+    resendError.value = 'Введите пароль от аккаунта.'
+    return
+  }
+
+  resendLoading.value = true
+  resendError.value = null
+  resendInfo.value = null
+  try {
+    await resendVerification({ email, password: resendPassword.value, locale: 'ru' })
+    // Бэк всегда 204, даже если пара email/пароль неверная — это специально,
+    // чтобы нельзя было через ответ узнавать, есть ли такой аккаунт.
+    resendInfo.value = 'Если данные верны, мы выслали новое письмо. Проверьте почту.'
+    resendPassword.value = ''
+    resendOpen.value = false
+    startCountdown()
+  } catch (err) {
+    resendError.value =
+      err instanceof HttpError
+        ? err.message || 'Не удалось отправить письмо. Попробуйте позже.'
+        : 'Не удалось отправить письмо. Попробуйте позже.'
+  } finally {
+    resendLoading.value = false
+  }
 }
 
 function handleBackToRegister() {
   clearPendingEmailVerification()
-  router.push({ name: 'register' })
+  void router.push({ name: 'register' })
 }
 
 onMounted(() => {
   const pending = getPendingEmailVerification()
   if (!pending) {
-    router.replace({ name: 'register' })
+    void router.replace({ name: 'register' })
     return
   }
-
   pendingEmail.value = pending.email
-  storedVerificationToken.value = pending.verificationToken ?? null
-
-  const reasonFromQuery = route.query.reason
-  if (typeof reasonFromQuery === 'string' && reasonFromQuery.trim().length > 0) {
-    if (isVerifyEmailAlreadyUsedReason(reasonFromQuery)) {
-      clearPendingEmailVerification()
-      void router.replace({ name: 'login', query: { verified: '1' } })
-      return
-    }
-    submitError.value = verifyEmailErrorMessage(reasonFromQuery.trim())
-    phase.value = 'error'
-    return
-  }
-
-  const tokenFromQuery = route.query.token
-  if (typeof tokenFromQuery === 'string' && tokenFromQuery.trim().length > 0) {
-    void submitVerification(tokenFromQuery.trim())
-    return
-  }
-
-  if (pending.verificationToken) {
-    void submitVerification(pending.verificationToken)
-    return
-  }
-
-  phase.value = 'awaiting'
-  startCountdown()
 })
 
 onUnmounted(() => {
@@ -134,67 +106,64 @@ onUnmounted(() => {
 
     <main class="auth-page__form-wrapper">
       <div class="auth-page__form">
-        <template v-if="phase === 'loading'">
-          <h1 class="auth-page__title">Подтверждение email</h1>
-          <p class="auth-page__subtitle">Проверяем ссылку…</p>
-          <div class="auth-page__loading" aria-busy="true">
-            <span class="auth-page__spinner" aria-hidden="true" />
-          </div>
-        </template>
+        <h1 class="auth-page__title">Проверьте почту</h1>
+        <p v-if="pendingEmail" class="auth-page__subtitle">
+          Мы отправили письмо с ссылкой для подтверждения на {{ pendingEmail }}.
+          Перейдите по ссылке в письме, чтобы активировать аккаунт.
+        </p>
 
-        <template v-else-if="phase === 'awaiting'">
-          <h1 class="auth-page__title">Проверьте почту</h1>
-          <p v-if="pendingEmail" class="auth-page__subtitle">
-            Мы отправили письмо с ссылкой для подтверждения на {{ pendingEmail }}.
-            Перейдите по ссылке в письме, чтобы активировать аккаунт.
-          </p>
-          <div class="auth-page__fields">
-            <button
-              type="button"
-              class="auth-page__btn auth-page__btn--secondary"
-              @click="handleBackToRegister"
-            >
-              Назад к регистрации
-            </button>
-            <button
-              type="button"
-              class="auth-page__resend"
-              :disabled="resendCountdown > 0"
-              title="Повторная отправка появится после подключения почтового сервера"
-              @click="handleResend"
-            >
-              Отправить письмо ещё раз
-              <template v-if="resendCountdown > 0"> ({{ resendCountdown }})</template>
-            </button>
-          </div>
-        </template>
+        <p v-if="resendInfo" class="auth-page__info" role="status">{{ resendInfo }}</p>
 
-        <template v-else>
-          <h1 class="auth-page__title">Не удалось подтвердить</h1>
-          <p v-if="pendingEmail" class="auth-page__subtitle">
-            Email: {{ pendingEmail }}
-          </p>
-          <p v-if="submitError" class="auth-page__error" role="alert">
-            {{ submitError }}
-          </p>
-          <div class="auth-page__fields">
-            <button
-              v-if="canRetry"
-              type="button"
-              class="auth-page__btn auth-page__btn--primary"
-              @click="handleRetry"
-            >
-              Попробовать снова
-            </button>
-            <button
-              type="button"
-              class="auth-page__btn auth-page__btn--secondary"
-              @click="handleBackToRegister"
-            >
-              Зарегистрироваться заново
-            </button>
-          </div>
-        </template>
+        <!-- Инлайн-форма повторной отправки. email уже знаем — нужен только пароль. -->
+        <form
+          v-if="resendOpen"
+          class="auth-page__fields"
+          @submit.prevent="submitResend"
+        >
+          <input
+            v-model="resendPassword"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Пароль от аккаунта"
+            class="auth-page__input"
+            :disabled="resendLoading"
+          />
+          <p v-if="resendError" class="auth-page__error" role="alert">{{ resendError }}</p>
+          <button
+            type="submit"
+            class="auth-page__btn auth-page__btn--primary"
+            :disabled="resendLoading || resendPassword.length === 0"
+          >
+            {{ resendLoading ? 'Отправляем…' : 'Отправить письмо' }}
+          </button>
+          <button
+            type="button"
+            class="auth-page__btn auth-page__btn--secondary"
+            :disabled="resendLoading"
+            @click="resendOpen = false"
+          >
+            Отмена
+          </button>
+        </form>
+
+        <div v-else class="auth-page__fields">
+          <button
+            type="button"
+            class="auth-page__btn auth-page__btn--secondary"
+            @click="handleBackToRegister"
+          >
+            Назад к регистрации
+          </button>
+          <button
+            type="button"
+            class="auth-page__resend"
+            :disabled="resendCountdown > 0"
+            @click="handleToggleResend"
+          >
+            Отправить письмо ещё раз
+            <template v-if="resendCountdown > 0"> ({{ resendCountdown }})</template>
+          </button>
+        </div>
       </div>
     </main>
   </div>
@@ -234,6 +203,40 @@ onUnmounted(() => {
   font-size: 0.875rem;
   color: #dc2626;
   text-align: center;
+}
+
+.auth-page__info {
+  margin: 0 0 var(--auth-space-m);
+  padding: var(--auth-space-s) var(--auth-space-m);
+  font-size: 0.875rem;
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
+  border-radius: var(--auth-radius);
+  text-align: center;
+}
+
+.auth-page__input {
+  width: 100%;
+  padding: var(--auth-space-m);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--auth-border);
+  border-radius: var(--auth-radius);
+  color: var(--auth-fg);
+  font-size: 1rem;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.auth-page__input:focus {
+  border-color: var(--auth-brand);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.auth-page__input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .auth-page__subtitle {

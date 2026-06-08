@@ -628,10 +628,7 @@ export interface paths {
         };
         /**
          * Подтверждение email по ссылке из письма
-         * @description Публичный эндпоинт. Принимает одноразовый токен из письма подтверждения, активирует пользователя и редиректит на UI.
-         *
-         *     На успех: 302 на verify_email.success_url.
-         *     На ошибку: 302 на verify_email.error_url?reason=<code>, где code — одно из: empty, not_found, used, expired, internal.
+         * @description Публичный эндпоинт. Фронтовая страница verify дёргает его с токеном из письма и показывает результат. На успех — 200, иначе HTTP-код причины (400 пустой, 403 истёк, 404 не найден, 409 использован) + ErrorResponse.
          */
         get: {
             parameters: {
@@ -645,11 +642,99 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Редирект на UI (успех или ошибка с reason в query) */
-                302: {
+                /** @description Email подтверждён */
+                200: {
                     headers: {
-                        /** @description URL для редиректа */
-                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OkResponse"];
+                    };
+                };
+                /** @description Пустой токен */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Токен истёк */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Токен не найден */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Токен уже использован */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description Внутренняя ошибка */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/resend-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Переотправка письма подтверждения email
+         * @description Принимает email+password как «лёгкую авторизацию». Если пара верна и пользователь не активирован — старые токены гасятся, генерится новый и уходит письмо. Ответ всегда нейтральный (204), чтобы нельзя было перечислять пользователей/состояния.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ResendVerificationRequest"];
+                };
+            };
+            responses: {
+                /** @description Принято (письмо отправлено, если пара верна и не активирован) */
+                204: {
+                    headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
@@ -657,8 +742,6 @@ export interface paths {
                 500: components["responses"]["InternalServerError"];
             };
         };
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2253,6 +2336,8 @@ export interface components {
         ErrorResponse: {
             /** @example Internal server error */
             error: string;
+            /** @description Машиночитаемый код, когда фронту нужно отличить причину. Например login при верных кредах, но неподтверждённом email → "email_not_verified". */
+            reason?: string;
         };
         UploadFileResponse: {
             /** @description Публичный URL загруженного файла */
@@ -2275,6 +2360,22 @@ export interface components {
              * @description Пароль пользователя
              */
             password: string;
+            /**
+             * @description Язык письма подтверждения (по умолчанию ru)
+             * @enum {string}
+             */
+            locale?: "ru" | "en";
+        };
+        ResendVerificationRequest: {
+            /** Format: email */
+            email: string;
+            /** Format: password */
+            password: string;
+            /**
+             * @description Язык письма подтверждения (по умолчанию ru)
+             * @enum {string}
+             */
+            locale?: "ru" | "en";
         };
         LoginRequest: {
             /**
@@ -2293,8 +2394,6 @@ export interface components {
         };
         SigninResponse: {
             userId: components["schemas"]["UUID"];
-            /** @description Сырой токен подтверждения email. Возвращается ВРЕМЕННО, пока не подключена реальная отправка письма (issue #29). После подключения SMTP это поле будет удалено из ответа. */
-            verification_token?: string;
         };
         LoginResponse: {
             userId: components["schemas"]["UUID"];

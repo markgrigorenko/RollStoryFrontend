@@ -1,0 +1,46 @@
+# Production docker-compose для фронта. Образ тянется из registry с тегом
+# IMAGE_TAG (передаётся CI как git SHA). Сборка локально: только в CI через
+# Dockerfile.
+#
+# Применение на VPS:
+#   IMAGE_TAG=<sha> docker compose pull && docker compose up -d
+# или через обёртку, которая сама достанет SHA из running контейнера:
+#   ./deploy/scripts/dc.sh up -d
+#
+# Сети:
+#   proxy-network (rollstory-net) — external, шарится с rollstory-proxy и
+#                                   rollstory-backend. Через неё outer-nginx
+#                                   достаёт http://rollstory-frontend:80,
+#                                   а внутренний nginx — http://rollstory-server:8080.
+
+services:
+  frontend:
+    image: ${REGISTRY_URL}/rollstory-frontend:${IMAGE_TAG:?IMAGE_TAG must be set (git SHA, выставляется CI)}
+    container_name: rollstory-frontend
+    restart: unless-stopped
+    networks:
+      - proxy-network
+    # Порты наружу не пробрасываем — фронт доступен только через rollstory-proxy.
+    # Локально дёрнуть — `docker compose exec frontend wget -qO- http://localhost/healthz`.
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    mem_limit: 128m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
+
+networks:
+  # External, создаётся отдельной командой на VPS (см. rollstory-backend README):
+  #   docker network create rollstory-net
+  # Шарится с rollstory-proxy и rollstory-backend.
+  proxy-network:
+    external: true
+    name: rollstory-net
