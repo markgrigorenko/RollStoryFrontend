@@ -2,10 +2,12 @@ export { getApiBaseUrl, HttpError, postJson, resolveApiUrl } from './client'
 export {
   login,
   refreshTokens,
+  resendVerification,
   signUp,
   verifyEmail,
   type LoginRequestBody,
   type LoginResponseBody,
+  type ResendVerificationRequestBody,
   type SignUpRequestBody,
   type SignUpResponseBody,
   type VerifyEmailResult,

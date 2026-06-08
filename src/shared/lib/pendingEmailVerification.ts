@@ -3,7 +3,6 @@ const STORAGE_KEY = 'rs_pending_email_verification'
 export type PendingEmailVerification = {
   userId: string
   email: string
-  verificationToken?: string
 }
 
 export function savePendingEmailVerification(data: PendingEmailVerification): void {
