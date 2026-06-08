@@ -102,14 +102,16 @@ export function httpFetch<T>(url: string, init: HttpFetchInit, retriedAfterRefre
 }
 
 function mapStatusToError(status: number, message: string, body: unknown): Error {
+  // body протаскиваем во все подклассы, чтобы UI мог достать machine-readable
+  // `reason` из ErrorResponse (например, login → reason: "email_not_verified").
   if (status === 401) {
-    return new AuthFailedError(message)
+    return new AuthFailedError(message, body)
   }
   if (status === 403) {
-    return new InvalidCredentialsError(message)
+    return new InvalidCredentialsError(message, body)
   }
   if (status === 500) {
-    return new InternalServerError(message)
+    return new InternalServerError(message, body)
   }
   return new HttpError(message, status, body)
 }

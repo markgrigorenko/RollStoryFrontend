@@ -1,7 +1,10 @@
 const STORAGE_KEY = 'rs_pending_email_verification'
 
+// Чёрная коробка состояния «есть аккаунт без подтверждения, мы его помним».
+// Используется ConfirmEmailView, чтобы знать email для повторной отправки,
+// без необходимости заново его вводить. userId нам тут не нужен — для resend
+// бэк принимает только email+password.
 export type PendingEmailVerification = {
-  userId: string
   email: string
 }
 
@@ -14,7 +17,7 @@ export function getPendingEmailVerification(): PendingEmailVerification | null {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as PendingEmailVerification
-    if (typeof parsed.userId !== 'string' || typeof parsed.email !== 'string') {
+    if (typeof parsed.email !== 'string' || parsed.email.length === 0) {
       return null
     }
     return parsed

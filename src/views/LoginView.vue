@@ -13,7 +13,19 @@ import { saveAuthSession } from '@/shared/lib/authSession'
 import { resetCampaignSessionState } from '@/shared/lib/resetCampaignSession'
 import { getOrCreateDeviceId } from '@/shared/lib/deviceId'
 import { isValidEmail } from '@/shared/lib/isValidEmail'
+import { savePendingEmailVerification } from '@/shared/lib/pendingEmailVerification'
 import { verifyEmailErrorMessage, isVerifyEmailAlreadyUsedReason } from '@/shared/lib/verifyEmailErrors'
+
+// Помогалка: достаёт machine-readable `reason` из тела HttpError (ErrorResponse).
+function readReason(err: unknown): string | null {
+  if (!(err instanceof HttpError)) return null
+  const body = err.body
+  if (body && typeof body === 'object' && 'reason' in body) {
+    const r = (body as { reason?: unknown }).reason
+    return typeof r === 'string' ? r : null
+  }
+  return null
+}
 import AuthBrandLink from '@/shared/ui/AuthBrandLink.vue'
 
 const router = useRouter()
@@ -215,6 +227,15 @@ async function handleLogin() {
     saveAuthSession(res)
     await router.replace({ name: 'map' })
   } catch (err) {
+    // Спец-кейс: креды верные, но email не подтверждён. Бэк кладёт
+    // reason: "email_not_verified" в ErrorResponse. Сохраняем email в
+    // pending и переводим на экран «проверьте почту» — там есть кнопка
+    // повторной отправки письма.
+    if (readReason(err) === 'email_not_verified') {
+      savePendingEmailVerification({ email: u })
+      await router.push({ name: 'confirmEmail' })
+      return
+    }
     if (err instanceof HttpError) {
       loginError.value =
         err.status === 401

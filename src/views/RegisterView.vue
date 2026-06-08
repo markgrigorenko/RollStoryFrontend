@@ -83,10 +83,11 @@ async function handleRegister() {
 
     if (attemptId !== registerAttempt) return
 
-    // Бэк теперь отдаёт только userId; подтверждение делает сам пользователь
-    // по ссылке из письма (страница /register/verify). Здесь — только
-    // запомнить email для экрана «проверьте почту» и кнопки «отправить ещё раз».
-    savePendingEmailVerification({ userId: res.userId, email })
+    // Бэк отдаёт только userId; подтверждение делает сам пользователь по
+    // ссылке из письма (страница /register/verify). Здесь — только запомнить
+    // email для экрана «проверьте почту» и кнопки «отправить ещё раз».
+    // res.userId не сохраняем — он нам ни для чего не нужен на этом флоу.
+    savePendingEmailVerification({ email })
     await router.push({ name: 'confirmEmail' })
   } catch (err) {
     if (attemptId !== registerAttempt) return
