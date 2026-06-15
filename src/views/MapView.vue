@@ -77,7 +77,7 @@ const initToast = ref<{ message: string; variant: 'success' | 'error' } | null>(
 
 provide(campaignLocationsMapBridgeKey, {
   pendingDetailLocationId,
-  removeLocationPin: (_locationId: string) => {
+  removeLocationPin: () => {
     restorePinsFromLocationSheets()
   },
 })

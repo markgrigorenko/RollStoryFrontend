@@ -10,7 +10,7 @@ import type { CampaignLocationListItem, LocationSheet } from '@/types/location-c
 
 export type SidebarTab = 'characters' | 'quests' | 'locations' | 'sessions'
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     activeTab: SidebarTab
     /** Картинка для блока локации (по умолчанию — та же, что карта) */

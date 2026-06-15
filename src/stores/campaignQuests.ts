@@ -11,7 +11,6 @@ import {
   buildQuestStateFromLocationDetails,
   readQuestMetadata,
   writeQuestMetadata,
-  type QuestMetadataRecord,
 } from '@/shared/lib/questMappers'
 import {
   DEMO_QUEST_LIST,

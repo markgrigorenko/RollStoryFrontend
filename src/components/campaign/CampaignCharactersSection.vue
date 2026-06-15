@@ -16,7 +16,7 @@ import {
   type CharacterSheet,
 } from '@/types/character-campaign'
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     /** true = полноэкранное меню кампании (полный лист); false = док-сайдбар (кратко как локация) */
     campaignFullscreen?: boolean

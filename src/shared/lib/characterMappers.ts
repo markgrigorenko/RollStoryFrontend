@@ -52,8 +52,6 @@ const ABILITY_STYLES: Pick<AbilityColumn, 'id' | 'label' | 'headerBg' | 'skillCe
   },
 ]
 
-const STAT_KEYS = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'] as const
-
 function formatModifier(value: number): string {
   return value >= 0 ? `+${value}` : `${value}`
 }

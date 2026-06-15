@@ -73,7 +73,7 @@ async function handleRegister() {
   isRegisterLoading.value = true
   try {
     const email = username.value.trim()
-    const res = await signUp(
+    await signUp(
       {
         email,
         password: password.value,
