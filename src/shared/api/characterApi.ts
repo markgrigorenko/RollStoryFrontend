@@ -42,6 +42,26 @@ export async function getCharacterDetail(
   return res
 }
 
+export async function generateCharacter(
+  campaignId: string,
+  body: components['schemas']['GenerateCharacterRequest'],
+  signal?: AbortSignal
+): Promise<components['schemas']['CharacterDetailResponse']> {
+  const res = await defaultApiClient.post<components['schemas']['CharacterDetailResponse']>(
+    API_ROUTES.db.characterGenerate(campaignId),
+    body,
+    {
+      headers: requireUserAuthHeaders(),
+      signal,
+      source: 'characterApi.generateCharacter',
+    }
+  )
+  if (!res) {
+    throw new Error('Пустой ответ при генерации персонажа')
+  }
+  return res
+}
+
 export async function createCharacterRelation(
   campaignId: string,
   body: components['schemas']['CreateCharacterRelationRequest'],

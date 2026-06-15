@@ -449,6 +449,65 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /db/campaign/{campaignId}/character/generate:
+    post:
+      summary: Генерация персонажа за один вызов (механика или LLM)
+      description: >
+        Автономно собирает валидного 5e-персонажа одним запросом, минуя
+        пошаговый мастер. Только владелец кампании.
+
+
+        Режим управляется флагом use_llm:
+
+        - use_llm=false — чисто механическая генерация: обязательны race_index и
+          class_index; статы — point-buy по пресету (preset, по умолчанию
+          balanced) + расовые бонусы + авто-ASI (кап 20); имя берётся из name
+          либо тривиальное.
+
+        - use_llm=true — генерация с контекстом кампании: модель выбирает расу,
+          класс, приоритет статов и нарратив (имя/описание/теги) с учётом
+          активного квеста и существующих сущностей; язык — locale кампании.
+          Числа считает бэкенд. Предложенные связи записываются только к
+          существующим персонажам той же кампании, иначе молча отбрасываются.
+
+
+        avatar_link — опционально, URL из POST /files/upload?kind=character.
+      tags:
+        - Character
+      parameters:
+        - $ref: "#/components/parameters/Authorization"
+        - $ref: "#/components/parameters/X-User-Id"
+        - $ref: "#/components/parameters/CampaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateCharacterRequest"
+      responses:
+        "201":
+          description: Персонаж сгенерирован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterDetailResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Ответ модели не прошёл доменную валидацию
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /db/campaign/{campaignId}/character/create/start:
     post:
       summary: Начало создания персонажа
@@ -1191,7 +1250,7 @@ paths:
 
   /db/campaign/{campaignId}/quest/{questId}/activate:
     post:
-      summary: Активация квеста
+      summary: Активация квеста (из draft или повторно из completed)
       parameters:
         - $ref: "#/components/parameters/Authorization"
         - $ref: "#/components/parameters/CampaignId"
@@ -1205,25 +1264,37 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /db/campaign/{campaignId}/quest/{questId}/deactivate:
+  /db/campaign/{campaignId}/quest/{questId}/complete:
     post:
-      summary: Деактивация квеста
+      summary: Завершение квеста с исходом
       parameters:
         - $ref: "#/components/parameters/Authorization"
         - $ref: "#/components/parameters/CampaignId"
         - $ref: "#/components/parameters/QuestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteQuestRequest"
       responses:
         "204":
-          description: Квест деактивирован
+          description: Квест завершён
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -1466,6 +1537,16 @@ components:
         description:
           type: string
           description: Описание кампании
+        locale:
+          type: string
+          description: Головной язык кампании; определяет язык генерируемых структур (по умолчанию ru)
+          enum: [ru, en]
+        setting:
+          type: string
+          description: Сеттинг/мир кампании (опционально)
+        tone:
+          type: string
+          description: Тон кампании (опционально)
 
     SigninRequest:
       type: object
@@ -1558,6 +1639,7 @@ components:
         - id
         - title
         - description
+        - locale
         - createdAt
       properties:
         id:
@@ -1568,6 +1650,16 @@ components:
         description:
           type: string
           description: Описание кампании
+        locale:
+          type: string
+          description: Головной язык кампании
+          enum: [ru, en]
+        setting:
+          type: string
+          description: Сеттинг/мир кампании
+        tone:
+          type: string
+          description: Тон кампании
         createdAt:
           type: string
           format: date-time
@@ -1969,6 +2061,43 @@ components:
         avatar_link:
           type: string
           description: URL аватара, загруженного во время создания (опционально)
+
+    GenerateCharacterRequest:
+      type: object
+      required:
+        - level
+      properties:
+        use_llm:
+          type: boolean
+          default: true
+          description: >
+            true — генерация с контекстом кампании через LLM; false — чисто
+            механическая (требует race_index и class_index).
+        prompt:
+          type: string
+          description: Пожелание к персонажу (используется в режиме LLM)
+        race_index:
+          type: string
+          description: Обязателен при use_llm=false; в режиме LLM игнорируется
+        class_index:
+          type: string
+          description: Обязателен при use_llm=false; в режиме LLM игнорируется
+        level:
+          type: integer
+          minimum: 1
+          maximum: 20
+        preset:
+          type: string
+          enum: [melee, finesse, arcane, charisma, wisdom, balanced]
+          description: Пресет распределения статов для механического режима
+        is_npc:
+          type: boolean
+        name:
+          type: string
+          maxLength: 100
+          description: Имя для механического режима (иначе генерируется тривиальное)
+        avatar_link:
+          type: string
 
     UpdateCharacterRequest:
       type: object
@@ -2527,9 +2656,26 @@ components:
           items:
             type: string
 
+    QuestStatus:
+      type: string
+      description: "Жизненный цикл квеста: draft (будущее), active (настоящее), completed (прошлое)"
+      enum: [draft, active, completed]
+
+    QuestOutcome:
+      type: string
+      description: "Исход завершённого квеста (только при status=completed)"
+      enum: [succeeded, failed, abandoned]
+
+    CompleteQuestRequest:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          $ref: "#/components/schemas/QuestOutcome"
+
     QuestResponse:
       type: object
-      required: [id, campaign_id, title, description, is_active, created_at]
+      required: [id, campaign_id, title, description, status, created_at]
       properties:
         id:
           $ref: "#/components/schemas/UUID"
@@ -2539,12 +2685,20 @@ components:
           type: string
         description:
           type: string
-        is_active:
-          type: boolean
+        status:
+          $ref: "#/components/schemas/QuestStatus"
+        outcome:
+          $ref: "#/components/schemas/QuestOutcome"
         tags:
           type: array
           items:
             type: string
+        activated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
         created_at:
           type: string
           format: date-time

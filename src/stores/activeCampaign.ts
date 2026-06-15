@@ -65,7 +65,7 @@ export const useActiveCampaignStore = defineStore('activeCampaign', () => {
   async function createDefaultCampaign(signal?: AbortSignal): Promise<string | null> {
     try {
       const created = await createCampaign(
-        { title: DEFAULT_CAMPAIGN_TITLE, description: '' },
+        { title: DEFAULT_CAMPAIGN_TITLE, description: '', locale: 'ru' },
         signal
       )
       const id = normalizeCreateCampaignId(created)
@@ -74,6 +74,7 @@ export const useActiveCampaignStore = defineStore('activeCampaign', () => {
         id,
         title: DEFAULT_CAMPAIGN_TITLE,
         description: '',
+        locale: 'ru',
         createdAt: new Date().toISOString(),
       }
       campaigns.value = [item]
