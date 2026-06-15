@@ -71,6 +71,8 @@ const locationMapBreadcrumb = ref<{ title: string } | null>(null)
 const mapCanvasAttachmentId = ref<string>(MAIN_CAMPAIGN_MAP_CANVAS_ID)
 const pendingDetailLocationId = ref<string | null>(null)
 const isCampaignBootstrapping = ref(false)
+const isMapRasterLoading = ref(true)
+let mapRasterLoadCount = 0
 const locationsLoading = ref(false)
 const locationsLoadedFromApi = ref(false)
 const initToast = ref<{ message: string; variant: 'success' | 'error' } | null>(null)
@@ -176,6 +178,36 @@ function readMapImageSize(url: string): Promise<{ mw: number; mh: number }> {
     img.onerror = () => reject(new Error('Не удалось загрузить изображение карты'))
     img.src = url
   })
+}
+
+function waitForLeafletImageOverlay(layer: L.ImageOverlay): Promise<void> {
+  return new Promise((resolve) => {
+    const el = layer.getElement() as HTMLImageElement | null
+    if (!el) {
+      resolve()
+      return
+    }
+    if (el.complete && el.naturalWidth > 0) {
+      resolve()
+      return
+    }
+    const done = () => resolve()
+    el.addEventListener('load', done, { once: true })
+    el.addEventListener('error', done, { once: true })
+  })
+}
+
+async function withMapRasterLoading<T>(fn: () => Promise<T>): Promise<T> {
+  mapRasterLoadCount += 1
+  isMapRasterLoading.value = true
+  try {
+    return await fn()
+  } finally {
+    mapRasterLoadCount = Math.max(0, mapRasterLoadCount - 1)
+    if (mapRasterLoadCount === 0) {
+      isMapRasterLoading.value = false
+    }
+  }
 }
 
 function computeCappedMaxZoom(fitZoom: number): number {
@@ -304,24 +336,27 @@ function syncMapPinsFromCampaignSheets() {
 
 async function setMapRasterImageUrl(url: string): Promise<boolean> {
   if (!map) return false
-  try {
-    const { mw, mh } = await readMapImageSize(url)
-    if (!map) return false
-    const bounds = L.latLngBounds(L.latLng(0, 0), L.latLng(mh, mw))
-    clearMarkersForImagerySwap()
-    if (imageOverlayLayer) {
-      map.removeLayer(imageOverlayLayer)
-      imageOverlayLayer = null
+  return withMapRasterLoading(async () => {
+    try {
+      const { mw, mh } = await readMapImageSize(url)
+      if (!map) return false
+      const bounds = L.latLngBounds(L.latLng(0, 0), L.latLng(mh, mw))
+      clearMarkersForImagerySwap()
+      if (imageOverlayLayer) {
+        map.removeLayer(imageOverlayLayer)
+        imageOverlayLayer = null
+      }
+      imageOverlayLayer = L.imageOverlay(url, bounds).addTo(map)
+      await waitForLeafletImageOverlay(imageOverlayLayer)
+      mapBounds = bounds
+      map.setMaxBounds(bounds)
+      snapMapToDefaultExtent()
+      syncMapPinsFromCampaignSheets()
+      return true
+    } catch {
+      return false
     }
-    imageOverlayLayer = L.imageOverlay(url, bounds).addTo(map)
-    mapBounds = bounds
-    map.setMaxBounds(bounds)
-    snapMapToDefaultExtent()
-    syncMapPinsFromCampaignSheets()
-    return true
-  } catch {
-    return false
-  }
+  })
 }
 
 async function restoreMainCampaignMapCanvas() {
@@ -727,7 +762,7 @@ function onMapZoomEnd() {
 onMounted(() => {
   if (!mapContainer.value) return
 
-  void (async () => {
+  void withMapRasterLoading(async () => {
     let mw: number
     let mh: number
     try {
@@ -763,27 +798,31 @@ onMounted(() => {
     })
 
     imageOverlayLayer = L.imageOverlay(mapImageUrl, bounds).addTo(map)
+    await waitForLeafletImageOverlay(imageOverlayLayer)
     map.attributionControl.setPrefix('')
     map.setMaxBounds(bounds)
     map.fitBounds(bounds)
 
-    map.whenReady(() => {
-      map!.invalidateSize()
-      requestAnimationFrame(() => {
+    await new Promise<void>((resolve) => {
+      map!.whenReady(() => {
+        map!.invalidateSize()
         requestAnimationFrame(() => {
-          try {
-            applyMinZoom()
-            /** Центрируем растр в окне на минимальном зуме — без `fitBounds`, чтобы не вернуть тёмные поля. */
-            map!.setView(mapBounds!.getCenter(), map!.getMinZoom(), { animate: false })
-            updateZoomPercent()
-            mapPinsLog('map.whenReady: инициализация и загрузка данных кампании')
-            void (async () => {
-              await bootstrapCampaignIfNeeded()
-              await loadCampaignDataFromApi()
-            })()
-          } finally {
-            mapContainer.value?.classList.remove('map-container--initializing')
-          }
+          requestAnimationFrame(() => {
+            try {
+              applyMinZoom()
+              /** Центрируем растр в окне на минимальном зуме — без `fitBounds`, чтобы не вернуть тёмные поля. */
+              map!.setView(mapBounds!.getCenter(), map!.getMinZoom(), { animate: false })
+              updateZoomPercent()
+              mapPinsLog('map.whenReady: инициализация и загрузка данных кампании')
+              void (async () => {
+                await bootstrapCampaignIfNeeded()
+                await loadCampaignDataFromApi()
+              })()
+            } finally {
+              mapContainer.value?.classList.remove('map-container--initializing')
+            }
+            resolve()
+          })
         })
       })
     })
@@ -803,7 +842,7 @@ onMounted(() => {
     map.on('resize', applyMinZoom)
     window.addEventListener('resize', onWindowResizeMapAndSidebar)
     window.addEventListener('keydown', handleGlobalKeyDown)
-  })()
+  })
 })
 
 onUnmounted(() => {
@@ -1018,6 +1057,11 @@ function onOpenLocationFromQuest(locationId: string) {
         />
       </div>
     </transition>
+    <CampaignInitOverlay
+      v-if="isMapRasterLoading"
+      message="Загружаем карту…"
+      hint="Подготавливаем изображение кампании"
+    />
     <CampaignInitOverlay v-if="isCampaignBootstrapping" />
     <AppToast
       v-if="initToast"

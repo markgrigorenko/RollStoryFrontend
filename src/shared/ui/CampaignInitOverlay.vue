@@ -1,15 +1,24 @@
 <script setup lang="ts">
-defineProps<{
-  message?: string
-}>()
+withDefaults(
+  defineProps<{
+    message?: string
+    hint?: string
+    showHint?: boolean
+  }>(),
+  {
+    message: 'Подготавливаем вашу кампанию…',
+    hint: 'Создаём демо-локации, персонажей и квесты',
+    showHint: true,
+  },
+)
 </script>
 
 <template>
   <div class="campaign-init" role="status" aria-live="polite" aria-busy="true">
     <div class="campaign-init__card">
       <span class="campaign-init__spinner" aria-hidden="true" />
-      <p class="campaign-init__text">{{ message ?? 'Подготавливаем вашу кампанию…' }}</p>
-      <p class="campaign-init__hint">Создаём демо-локации, персонажей и квесты</p>
+      <p class="campaign-init__text">{{ message }}</p>
+      <p v-if="showHint" class="campaign-init__hint">{{ hint }}</p>
     </div>
   </div>
 </template>
