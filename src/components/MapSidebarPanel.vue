@@ -125,6 +125,8 @@ function setTab(tab: SidebarTab) {
       <CampaignCharactersSection
         v-else-if="activeTab === 'characters'"
         :campaign-fullscreen="campaignFullscreen"
+        :location-list="locationList"
+        :location-sheets="locationSheets"
       />
       <CampaignQuestsSection
         v-else-if="activeTab === 'quests'"

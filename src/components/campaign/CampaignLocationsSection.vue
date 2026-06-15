@@ -15,6 +15,10 @@ import {
   uploadFile,
 } from '@/shared/api'
 import { campaignLocationsMapBridgeKey } from '@/shared/lib/campaignLocationsMapBridge'
+import {
+  findCharacterIdByTitle,
+  findQuestIdByTitle as findQuestIdByTitleInStore,
+} from '@/shared/lib/entityNavigation'
 import { applyLocationDetailToSheet } from '@/shared/lib/locationMappers'
 import {
   canLinkCampaignLocations,
@@ -219,6 +223,46 @@ async function openLocationDetail(id: string) {
   browsePhase.value = 'detail'
   locationActionError.value = null
   await refreshLocationDetail(id)
+}
+
+function openLinkedQuest(questId: string) {
+  mapBridge?.openQuest(questId)
+}
+
+function openLinkedCharacter(characterId: string) {
+  mapBridge?.openCharacter(characterId)
+}
+
+function resolveQuestIdForTitle(title: string): string | null {
+  const normalized = title.trim().toLowerCase()
+  const fromRelations = (sheet.value.detailRelatedQuests ?? []).find(
+    (row) => row.title.trim().toLowerCase() === normalized
+  )
+  if (fromRelations?.attachedQuestId) return fromRelations.attachedQuestId
+  const campaignId = activeCampaignStore.campaignId
+  if (campaignId) {
+    const fromMeta = findQuestIdByTitle(title, campaignId)
+    if (fromMeta) return fromMeta
+  }
+  return findQuestIdByTitleInStore(title, questList.value, questSheets.value)
+}
+
+function tryOpenQuestByTitle(title: string) {
+  const questId = resolveQuestIdForTitle(title)
+  if (questId) openLinkedQuest(questId)
+}
+
+function tryOpenCharacterByTitle(title: string) {
+  const normalized = title.trim().toLowerCase()
+  const fromRelations = (sheet.value.detailRelatedCharacters ?? []).find(
+    (row) => row.title.trim().toLowerCase() === normalized
+  )
+  if (fromRelations?.attachedCharacterId) {
+    openLinkedCharacter(fromRelations.attachedCharacterId)
+    return
+  }
+  const characterId = findCharacterIdByTitle(title, characterList.value, campaignCharacterSheets.value)
+  if (characterId) openLinkedCharacter(characterId)
 }
 
 function backToLocationCards() {
@@ -728,7 +772,12 @@ onUnmounted(() => document.removeEventListener('keydown', onAttachEscape))
                     <span
                       v-for="(ql, qi) in cardQuestVisible(ls).visible"
                       :key="qi"
-                      class="cl-card__tag cl-card__tag--accent"
+                      class="cl-card__tag cl-card__tag--accent cl-card__tag--link"
+                      role="button"
+                      tabindex="0"
+                      @click.stop="tryOpenQuestByTitle(ql)"
+                      @keydown.enter.stop.prevent="tryOpenQuestByTitle(ql)"
+                      @keydown.space.stop.prevent="tryOpenQuestByTitle(ql)"
                       >{{ ql }}</span>
                     <span
                       v-if="cardQuestVisible(ls).more > 0"
@@ -786,12 +835,24 @@ onUnmounted(() => document.removeEventListener('keydown', onAttachEscape))
 
           <h1 class="map-sidebar__title">{{ sheet.displayTitle }}</h1>
           <div class="map-sidebar__tags">
-            <span class="map-sidebar__tag map-sidebar__tag--char">{{ detailMetaLine(sheet) }}</span>
-            <span
+            <button
+              v-if="sheet.linkedCharacter"
+              type="button"
+              class="map-sidebar__tag map-sidebar__tag--char map-sidebar__tag--clickable"
+              @click="tryOpenCharacterByTitle(sheet.linkedCharacter)"
+            >
+              {{ sheet.linkedCharacter }}
+            </button>
+            <span v-else class="map-sidebar__tag map-sidebar__tag--char">{{ detailMetaLine(sheet) }}</span>
+            <button
               v-for="(ql, qi) in detailQuestVisible(sheet).visible"
               :key="qi"
-              class="map-sidebar__tag map-sidebar__tag--quest"
-              >{{ ql }}</span>
+              type="button"
+              class="map-sidebar__tag map-sidebar__tag--quest map-sidebar__tag--clickable"
+              @click="tryOpenQuestByTitle(ql)"
+            >
+              {{ ql }}
+            </button>
             <span
               v-if="detailQuestVisible(sheet).more > 0"
               class="map-sidebar__tag map-sidebar__tag--more"
@@ -835,7 +896,23 @@ onUnmounted(() => document.removeEventListener('keydown', onAttachEscape))
               <p v-if="!relationQuestsList.length" class="cl-detail-block__empty-clue">К этой локации квестов пока не привязано.</p>
               <ul v-else class="cl-detail-block__list">
                 <li v-for="(row, qi) in relationQuestsList" :key="'dq-' + qi" class="cl-detail-block__li">
-                  <button type="button" class="cl-detail-block__link">{{ row.title }}</button>
+                  <button
+                    v-if="row.attachedQuestId"
+                    type="button"
+                    class="cl-detail-block__link"
+                    @click="openLinkedQuest(row.attachedQuestId)"
+                  >
+                    {{ row.title }}
+                  </button>
+                  <button
+                    v-else-if="row.linked"
+                    type="button"
+                    class="cl-detail-block__link"
+                    @click="tryOpenQuestByTitle(row.title)"
+                  >
+                    {{ row.title }}
+                  </button>
+                  <span v-else class="cl-detail-block__plain">{{ row.title }}</span>
                   <p v-if="row.description" class="cl-detail-block__sub">{{ row.description }}</p>
                 </li>
               </ul>
@@ -851,7 +928,23 @@ onUnmounted(() => document.removeEventListener('keydown', onAttachEscape))
               <ul v-else class="cl-detail-block__list">
                 <li v-for="(row, ci) in relationCharactersList" :key="'dc-' + ci" class="cl-detail-block__li">
                   <div class="cl-detail-block__row">
-                    <button type="button" class="cl-detail-block__link">{{ row.title }}</button>
+                    <button
+                      v-if="row.attachedCharacterId"
+                      type="button"
+                      class="cl-detail-block__link"
+                      @click="openLinkedCharacter(row.attachedCharacterId)"
+                    >
+                      {{ row.title }}
+                    </button>
+                    <button
+                      v-else-if="row.linked"
+                      type="button"
+                      class="cl-detail-block__link"
+                      @click="tryOpenCharacterByTitle(row.title)"
+                    >
+                      {{ row.title }}
+                    </button>
+                    <span v-else class="cl-detail-block__plain">{{ row.title }}</span>
                     <button
                       v-if="row.attachedCharacterId"
                       type="button"
@@ -1407,6 +1500,27 @@ onUnmounted(() => document.removeEventListener('keydown', onAttachEscape))
   color: #d4d4d4;
   background: var(--sidebar-tag-more-bg);
   border: 1px solid rgba(115, 115, 115, 0.4);
+}
+
+.map-sidebar__tag--clickable {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.map-sidebar__tag--clickable:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.cl-card__tag--link {
+  cursor: pointer;
+}
+
+.cl-card__tag--link:hover {
+  filter: brightness(1.08);
 }
 
 .cl-sidebar-detail .map-sidebar__media {

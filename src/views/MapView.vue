@@ -70,6 +70,8 @@ const locationMapBreadcrumb = ref<{ title: string } | null>(null)
 /** Привязка пинов и списка локаций к текущему растру: главная карта кампании или id родительской локации */
 const mapCanvasAttachmentId = ref<string>(MAIN_CAMPAIGN_MAP_CANVAS_ID)
 const pendingDetailLocationId = ref<string | null>(null)
+const pendingDetailCharacterId = ref<string | null>(null)
+const pendingDetailQuestId = ref<string | null>(null)
 const isCampaignBootstrapping = ref(false)
 const isMapRasterLoading = ref(true)
 let mapRasterLoadCount = 0
@@ -77,8 +79,43 @@ const locationsLoading = ref(false)
 const locationsLoadedFromApi = ref(false)
 const initToast = ref<{ message: string; variant: 'success' | 'error' } | null>(null)
 
+function dockSidebarForEntityNavigation(): void {
+  if (!isSidebarDocked.value && !isSidebarFullscreen.value) {
+    isSidebarDocked.value = true
+  }
+}
+
+function onOpenLocationFromSidebar(locationId: string) {
+  sidebarTab.value = 'locations'
+  dockSidebarForEntityNavigation()
+  void nextTick(() => {
+    pendingDetailLocationId.value = locationId
+  })
+}
+
+function onOpenCharacterFromSidebar(characterId: string) {
+  sidebarTab.value = 'characters'
+  dockSidebarForEntityNavigation()
+  void nextTick(() => {
+    pendingDetailCharacterId.value = characterId
+  })
+}
+
+function onOpenQuestFromSidebar(questId: string) {
+  sidebarTab.value = 'quests'
+  dockSidebarForEntityNavigation()
+  void nextTick(() => {
+    pendingDetailQuestId.value = questId
+  })
+}
+
 provide(campaignLocationsMapBridgeKey, {
   pendingDetailLocationId,
+  pendingDetailCharacterId,
+  pendingDetailQuestId,
+  openLocation: onOpenLocationFromSidebar,
+  openCharacter: onOpenCharacterFromSidebar,
+  openQuest: onOpenQuestFromSidebar,
   removeLocationPin: () => {
     restorePinsFromLocationSheets()
   },
@@ -881,13 +918,7 @@ function onActiveCampaignChanged() {
 }
 
 function onOpenLocationFromQuest(locationId: string) {
-  sidebarTab.value = 'locations'
-  if (!isSidebarDocked.value && !isSidebarFullscreen.value) {
-    isSidebarDocked.value = true
-  }
-  void nextTick(() => {
-    pendingDetailLocationId.value = locationId
-  })
+  onOpenLocationFromSidebar(locationId)
 }
 </script>
 

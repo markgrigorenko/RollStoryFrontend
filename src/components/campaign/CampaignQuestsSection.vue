@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import notFoundIconUrl from '@/assets/icons/not-found-icon.svg'
 import InlineSectionLoader from '@/shared/ui/InlineSectionLoader.vue'
+import { campaignLocationsMapBridgeKey } from '@/shared/lib/campaignLocationsMapBridge'
 import { useCampaignQuestsStore } from '@/stores/campaignQuests'
 import type { CampaignLocationListItem, LocationSheet } from '@/types/location-campaign'
-import type { QuestSheet } from '@/types/quest-campaign'
+import type { QuestLocationLink, QuestSheet } from '@/types/quest-campaign'
 
 const props = defineProps<{
   locationList: CampaignLocationListItem[]
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const questsStore = useCampaignQuestsStore()
+const mapBridge = inject(campaignLocationsMapBridgeKey)
 const { questList, questSheets, listLoading, loadedFromApi, lastError } = storeToRefs(questsStore)
 
 const viewMode = ref<'browse' | 'create'>('browse')
@@ -37,6 +39,17 @@ function watchQuestList() {
 }
 
 watch(questList, watchQuestList, { immediate: true })
+
+watch(
+  () => mapBridge?.pendingDetailQuestId?.value ?? null,
+  (id) => {
+    if (!id || viewMode.value === 'create') return
+    if (!questSheets.value[id]) return
+    selectedId.value = id
+    browsePhase.value = 'detail'
+    if (mapBridge) mapBridge.pendingDetailQuestId.value = null
+  }
+)
 
 onMounted(() => {
   void questsStore.loadFromApi()
@@ -77,18 +90,21 @@ const isSearchEmpty = computed(
   () => searchQuery.value.trim().length > 0 && filteredList.value.length === 0
 )
 
-function cardLocationVisible(sheet: NonNullable<(typeof cardRows.value)[0]['sheet']>) {
-  const labels = sheet.locationLinks.map((l) => l.locationTitle)
+function cardLocationVisible(sheet: NonNullable<(typeof cardRows.value)[0]['sheet']>): {
+  visible: QuestLocationLink[]
+  more: number
+} {
+  const links = sheet.locationLinks
   const max = 3
-  if (labels.length <= max) return { visible: labels, more: 0 }
-  return { visible: labels.slice(0, max), more: labels.length - max }
+  if (links.length <= max) return { visible: links, more: 0 }
+  return { visible: links.slice(0, max), more: links.length - max }
 }
 
-function detailLocationVisible(questSheet: QuestSheet) {
-  const labels = questSheet.locationLinks.map((l) => l.locationTitle)
+function detailLocationVisible(questSheet: QuestSheet): { visible: QuestLocationLink[]; more: number } {
+  const links = questSheet.locationLinks
   const max = 2
-  if (labels.length <= max) return { visible: labels, more: 0 }
-  return { visible: labels.slice(0, max), more: labels.length - max }
+  if (links.length <= max) return { visible: links, more: 0 }
+  return { visible: links.slice(0, max), more: links.length - max }
 }
 
 function cardExcerptPlain(sheet: NonNullable<(typeof cardRows.value)[0]['sheet']>): string {
@@ -174,6 +190,10 @@ async function detachLocation(locationId: string) {
 }
 
 function openLinkedLocation(locationId: string) {
+  if (mapBridge) {
+    mapBridge.openLocation(locationId)
+    return
+  }
   emit('open-location', locationId)
 }
 </script>
@@ -221,12 +241,15 @@ function openLinkedLocation(locationId: string) {
                 <button v-if="qs" type="button" class="cq-card" @click="openQuestDetail(item.id)">
                   <div class="cq-card__title">{{ qs.displayTitle }}</div>
                   <div class="cq-card__tags">
-                    <span
-                      v-for="(locTitle, li) in cardLocationVisible(qs).visible"
-                      :key="li"
-                      class="cq-card__tag cq-card__tag--loc"
-                      >{{ locTitle }}</span
+                    <button
+                      v-for="link in cardLocationVisible(qs).visible"
+                      :key="link.locationId"
+                      type="button"
+                      class="cq-card__tag cq-card__tag--loc cq-card__tag--link"
+                      @click.stop="openLinkedLocation(link.locationId)"
                     >
+                      {{ link.locationTitle }}
+                    </button>
                     <span v-if="cardLocationVisible(qs).more > 0" class="cq-card__tag cq-card__tag--accent"
                       >+{{ cardLocationVisible(qs).more }}</span
                     >
@@ -265,12 +288,15 @@ function openLinkedLocation(locationId: string) {
 
           <h1 class="map-sidebar__title">{{ sheet.displayTitle }}</h1>
           <div class="map-sidebar__tags">
-            <span
-              v-for="(locTitle, li) in detailLocationVisible(sheet).visible"
-              :key="li"
-              class="map-sidebar__tag map-sidebar__tag--char"
-              >{{ locTitle }}</span
+            <button
+              v-for="link in detailLocationVisible(sheet).visible"
+              :key="link.locationId"
+              type="button"
+              class="map-sidebar__tag map-sidebar__tag--char map-sidebar__tag--clickable"
+              @click="openLinkedLocation(link.locationId)"
             >
+              {{ link.locationTitle }}
+            </button>
             <span v-if="detailLocationVisible(sheet).more > 0" class="map-sidebar__tag map-sidebar__tag--more"
               >+{{ detailLocationVisible(sheet).more }}</span
             >
@@ -645,6 +671,20 @@ function openLinkedLocation(locationId: string) {
   color: #a3a3a3;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cq-card__tag--link,
+.map-sidebar__tag--clickable {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.cq-card__tag--link:hover,
+.map-sidebar__tag--clickable:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
 }
 
 .cq-card__excerpt {

@@ -7,6 +7,11 @@ const props = defineProps<{
   sheet: CharacterSheet
 }>()
 
+const emit = defineEmits<{
+  openLocation: [title: string]
+  openQuest: [title: string]
+}>()
+
 const TAG_ROW_MAX = 5
 
 const tagRow = computed(() => {
@@ -17,8 +22,16 @@ const tagRow = computed(() => {
 })
 
 function pillClass(t: QuestTag): string {
-  if (t.variant === 'orange' || t.variant === 'brown') return 'cssum__pill cssum__pill--loc'
-  return 'cssum__pill cssum__pill--quest'
+  if (t.variant === 'orange' || t.variant === 'brown') return 'cssum__pill cssum__pill--loc cssum__pill--link'
+  return 'cssum__pill cssum__pill--quest cssum__pill--link'
+}
+
+function onPillClick(tag: QuestTag) {
+  if (tag.variant === 'orange' || tag.variant === 'brown') {
+    emit('openLocation', tag.label)
+    return
+  }
+  emit('openQuest', tag.label)
 }
 </script>
 
@@ -30,7 +43,15 @@ function pillClass(t: QuestTag): string {
           <h1 class="cssum__name">{{ sheet.displayTitle }}</h1>
           <p v-if="sheet.listSubtitle" class="cssum__subtitle">{{ sheet.listSubtitle }}</p>
           <div class="cssum__pills">
-            <span v-for="(t, i) in tagRow.visible" :key="i" :class="pillClass(t)">{{ t.label }}</span>
+            <button
+              v-for="(t, i) in tagRow.visible"
+              :key="i"
+              type="button"
+              :class="pillClass(t)"
+              @click="onPillClick(t)"
+            >
+              {{ t.label }}
+            </button>
             <span v-if="tagRow.more > 0" class="cssum__pill cssum__pill--more">+{{ tagRow.more }}</span>
           </div>
         </div>
@@ -171,6 +192,18 @@ function pillClass(t: QuestTag): string {
   color: #d4d4d4;
   background: rgba(115, 115, 115, 0.25);
   border: 1px solid rgba(115, 115, 115, 0.4);
+}
+
+.cssum__pill--link {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  transition: filter 0.15s, transform 0.15s;
+}
+
+.cssum__pill--link:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .cssum__hero {

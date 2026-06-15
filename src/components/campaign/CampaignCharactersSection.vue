@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import CharacterCreateWizard from '@/components/campaign/CharacterCreateWizard.vue'
 import CharacterSheetSummaryPanel from '@/components/campaign/CharacterSheetSummaryPanel.vue'
 import notFoundIconUrl from '@/assets/icons/not-found-icon.svg'
 import InlineSectionLoader from '@/shared/ui/InlineSectionLoader.vue'
+import { campaignLocationsMapBridgeKey } from '@/shared/lib/campaignLocationsMapBridge'
+import {
+  findLocationIdByTitle,
+  findQuestIdByTitle,
+} from '@/shared/lib/entityNavigation'
 import { useCampaignCharactersStore } from '@/stores/campaignCharacters'
+import { useCampaignQuestsStore } from '@/stores/campaignQuests'
 import {
   createCharacterSheetFromDraft,
   defaultCharacterCreateDraft,
@@ -15,17 +21,27 @@ import {
   type CharacterCreateDraft,
   type CharacterSheet,
 } from '@/types/character-campaign'
+import type { CampaignLocationListItem, LocationSheet } from '@/types/location-campaign'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     /** true = полноэкранное меню кампании (полный лист); false = док-сайдбар (кратко как локация) */
     campaignFullscreen?: boolean
+    locationList?: CampaignLocationListItem[]
+    locationSheets?: Record<string, LocationSheet>
   }>(),
-  { campaignFullscreen: false }
+  {
+    campaignFullscreen: false,
+    locationList: () => [],
+    locationSheets: () => ({}),
+  }
 )
 
 const charactersStore = useCampaignCharactersStore()
+const questsStore = useCampaignQuestsStore()
+const mapBridge = inject(campaignLocationsMapBridgeKey)
 const { characterList, characterSheets, listLoading, loadedFromApi } = storeToRefs(charactersStore)
+const { questList, questSheets } = storeToRefs(questsStore)
 
 const viewMode = ref<'browse' | 'create'>('browse')
 /** Список карточек ↔ лист персонажа */
@@ -43,6 +59,16 @@ watch(
     }
   },
   { immediate: true }
+)
+
+watch(
+  () => mapBridge?.pendingDetailCharacterId?.value ?? null,
+  (id) => {
+    if (!id || viewMode.value === 'create') return
+    if (!characterSheets.value[id] && !DEMO_CHARACTER_SHEETS[id as keyof typeof DEMO_CHARACTER_SHEETS]) return
+    openCharacterDetail(id)
+    if (mapBridge) mapBridge.pendingDetailCharacterId.value = null
+  }
 )
 
 onMounted(() => {
@@ -145,6 +171,28 @@ function openCharacterDetail(id: string) {
   selectedId.value = id
   browsePhase.value = 'detail'
   void charactersStore.ensureDetailLoaded(id)
+}
+
+function tryOpenLocationByTitle(title: string) {
+  const locationId = findLocationIdByTitle(title, props.locationList, props.locationSheets)
+  if (locationId) {
+    mapBridge?.openLocation(locationId)
+  }
+}
+
+function tryOpenQuestByTitle(title: string) {
+  const questId = findQuestIdByTitle(title, questList.value, questSheets.value)
+  if (questId) {
+    mapBridge?.openQuest(questId)
+  }
+}
+
+function onCharacterLocationLabelClick(label: string) {
+  tryOpenLocationByTitle(label)
+}
+
+function onCharacterQuestLabelClick(label: string) {
+  tryOpenQuestByTitle(label)
 }
 
 function backToCharacterCards() {
@@ -257,13 +305,23 @@ async function onCreateComplete(payload?: {
                   <div class="cc-card__content">
                     <div class="cc-card__title">{{ cs.displayTitle }}</div>
                     <div class="cc-card__tags">
-                      <span v-if="cardLocationLabel(cs)" class="cc-card__tag cc-card__tag--loc">{{ cardLocationLabel(cs) }}</span>
-                      <span
+                      <button
+                        v-if="cardLocationLabel(cs)"
+                        type="button"
+                        class="cc-card__tag cc-card__tag--loc cc-card__tag--link"
+                        @click.stop="onCharacterLocationLabelClick(cardLocationLabel(cs)!)"
+                      >
+                        {{ cardLocationLabel(cs) }}
+                      </button>
+                      <button
                         v-for="(ql, qi) in cardQuestVisible(cs).visible"
                         :key="qi"
-                        class="cc-card__tag cc-card__tag--accent"
-                        >{{ ql }}</span
+                        type="button"
+                        class="cc-card__tag cc-card__tag--accent cc-card__tag--link"
+                        @click.stop="onCharacterQuestLabelClick(ql)"
                       >
+                        {{ ql }}
+                      </button>
                       <span v-if="cardQuestVisible(cs).more > 0" class="cc-card__tag cc-card__tag--accent"
                         >+{{ cardQuestVisible(cs).more }}</span
                       >
@@ -298,12 +356,23 @@ async function onCreateComplete(payload?: {
           <h1 class="map-sidebar__title">{{ sheet.displayTitle }}</h1>
           <div class="map-sidebar__tags">
             <span class="map-sidebar__tag map-sidebar__tag--char">{{ detailMetaLine(sheet) }}</span>
-            <span
+            <button
+              v-if="cardLocationLabel(sheet)"
+              type="button"
+              class="map-sidebar__tag map-sidebar__tag--quest map-sidebar__tag--clickable cc-card__tag--loc"
+              @click="onCharacterLocationLabelClick(cardLocationLabel(sheet)!)"
+            >
+              {{ cardLocationLabel(sheet) }}
+            </button>
+            <button
               v-for="(ql, qi) in detailQuestVisible(sheet).visible"
               :key="qi"
-              class="map-sidebar__tag map-sidebar__tag--quest"
-              >{{ ql }}</span
+              type="button"
+              class="map-sidebar__tag map-sidebar__tag--quest map-sidebar__tag--clickable"
+              @click="onCharacterQuestLabelClick(ql)"
             >
+              {{ ql }}
+            </button>
             <span v-if="detailQuestVisible(sheet).more > 0" class="map-sidebar__tag map-sidebar__tag--more"
               >+{{ detailQuestVisible(sheet).more }}</span
             >
@@ -390,7 +459,11 @@ async function onCreateComplete(payload?: {
               <span>Все персонажи</span>
             </button>
           </div>
-          <CharacterSheetSummaryPanel :sheet="sheet" />
+          <CharacterSheetSummaryPanel
+            :sheet="sheet"
+            @open-location="tryOpenLocationByTitle"
+            @open-quest="tryOpenQuestByTitle"
+          />
         </div>
 
         <aside class="cc-sheet-jump" aria-label="По разделам">
@@ -968,6 +1041,20 @@ async function onCreateComplete(payload?: {
   color: #15803d;
   background: #f6ffed;
   border: 1.5px solid #4ade80;
+}
+
+.cc-card__tag--link,
+.map-sidebar__tag--clickable {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.cc-card__tag--link:hover,
+.map-sidebar__tag--clickable:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
 }
 
 .cc-card__excerpt {
