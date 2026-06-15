@@ -20,7 +20,10 @@ export function normalizeCampaignListItem(raw: unknown): CampaignListItem | null
   const description = pickString(o, 'description') ?? ''
   const createdAt =
     pickString(o, 'createdAt', 'created_at') ?? new Date(0).toISOString()
-  return { id, title, description, createdAt }
+  const locale = pickString(o, 'locale') === 'en' ? 'en' : 'ru'
+  const setting = pickString(o, 'setting')
+  const tone = pickString(o, 'tone')
+  return { id, title, description, locale, setting, tone, createdAt }
 }
 
 export function normalizeCampaignList(raw: unknown): CampaignListItem[] {

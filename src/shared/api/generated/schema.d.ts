@@ -823,6 +823,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/db/campaign/{campaignId}/character/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Генерация персонажа за один вызов (механика или LLM)
+         * @description Автономно собирает валидного 5e-персонажа одним запросом, минуя пошаговый мастер. Только владелец кампании.
+         *
+         *     Режим управляется флагом use_llm:
+         *     - use_llm=false — чисто механическая генерация: обязательны race_index и
+         *       class_index; статы — point-buy по пресету (preset, по умолчанию
+         *       balanced) + расовые бонусы + авто-ASI (кап 20); имя берётся из name
+         *       либо тривиальное.
+         *
+         *     - use_llm=true — генерация с контекстом кампании: модель выбирает расу,
+         *       класс, приоритет статов и нарратив (имя/описание/теги) с учётом
+         *       активного квеста и существующих сущностей; язык — locale кампании.
+         *       Числа считает бэкенд. Предложенные связи записываются только к
+         *       существующим персонажам той же кампании, иначе молча отбрасываются.
+         *
+         *
+         *     avatar_link — опционально, URL из POST /files/upload?kind=character.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Заголовок авторизации с Bearer токеном */
+                    Authorization: components["parameters"]["Authorization"];
+                    /** @description Идентификатор пользователя (UUID) */
+                    "X-User-Id": components["parameters"]["X-User-Id"];
+                };
+                path: {
+                    /** @description Идентификатор кампании */
+                    campaignId: components["parameters"]["CampaignId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["GenerateCharacterRequest"];
+                };
+            };
+            responses: {
+                /** @description Персонаж сгенерирован */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CharacterDetailResponse"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                /** @description Ответ модели не прошёл доменную валидацию */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                500: components["responses"]["InternalServerError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/db/campaign/{campaignId}/character/create/start": {
         parameters: {
             query?: never;
@@ -2076,7 +2156,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Активация квеста */
+        /** Активация квеста (из draft или повторно из completed) */
         post: {
             parameters: {
                 query?: never;
@@ -2104,6 +2184,7 @@ export interface paths {
                 401: components["responses"]["Unauthorized"];
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
                 500: components["responses"]["InternalServerError"];
             };
         };
@@ -2113,7 +2194,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/db/campaign/{campaignId}/quest/{questId}/deactivate": {
+    "/db/campaign/{campaignId}/quest/{questId}/complete": {
         parameters: {
             query?: never;
             header?: never;
@@ -2122,7 +2203,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Деактивация квеста */
+        /** Завершение квеста с исходом */
         post: {
             parameters: {
                 query?: never;
@@ -2138,18 +2219,24 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CompleteQuestRequest"];
+                };
+            };
             responses: {
-                /** @description Квест деактивирован */
+                /** @description Квест завершён */
                 204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
+                400: components["responses"]["BadRequest"];
                 401: components["responses"]["Unauthorized"];
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
                 500: components["responses"]["InternalServerError"];
             };
         };
@@ -2348,6 +2435,15 @@ export interface components {
             title: string;
             /** @description Описание кампании */
             description: string;
+            /**
+             * @description Головной язык кампании; определяет язык генерируемых структур (по умолчанию ru)
+             * @enum {string}
+             */
+            locale?: "ru" | "en";
+            /** @description Сеттинг/мир кампании (опционально) */
+            setting?: string;
+            /** @description Тон кампании (опционально) */
+            tone?: string;
         };
         SigninRequest: {
             /**
@@ -2408,6 +2504,15 @@ export interface components {
             title: string;
             /** @description Описание кампании */
             description: string;
+            /**
+             * @description Головной язык кампании
+             * @enum {string}
+             */
+            locale: "ru" | "en";
+            /** @description Сеттинг/мир кампании */
+            setting?: string;
+            /** @description Тон кампании */
+            tone?: string;
             /**
              * Format: date-time
              * @description Дата создания
@@ -2571,6 +2676,29 @@ export interface components {
         CompleteCharacterRequest: {
             sessionId: components["schemas"]["UUID"];
             /** @description URL аватара, загруженного во время создания (опционально) */
+            avatar_link?: string;
+        };
+        GenerateCharacterRequest: {
+            /**
+             * @description true — генерация с контекстом кампании через LLM; false — чисто механическая (требует race_index и class_index).
+             * @default true
+             */
+            use_llm: boolean;
+            /** @description Пожелание к персонажу (используется в режиме LLM) */
+            prompt?: string;
+            /** @description Обязателен при use_llm=false; в режиме LLM игнорируется */
+            race_index?: string;
+            /** @description Обязателен при use_llm=false; в режиме LLM игнорируется */
+            class_index?: string;
+            level: number;
+            /**
+             * @description Пресет распределения статов для механического режима
+             * @enum {string}
+             */
+            preset?: "melee" | "finesse" | "arcane" | "charisma" | "wisdom" | "balanced";
+            is_npc?: boolean;
+            /** @description Имя для механического режима (иначе генерируется тривиальное) */
+            name?: string;
             avatar_link?: string;
         };
         /** @description Полная спека персонажа. Прогоняется через те же правила 5e, что и при создании (point-buy, ASI по классу/уровню, лимиты proficiency, существование расы/класса). baseStats — БАЗОВЫЕ значения до ASI. */
@@ -2803,13 +2931,31 @@ export interface components {
             description?: string;
             tags?: string[];
         };
+        /**
+         * @description Жизненный цикл квеста: draft (будущее), active (настоящее), completed (прошлое)
+         * @enum {string}
+         */
+        QuestStatus: "draft" | "active" | "completed";
+        /**
+         * @description Исход завершённого квеста (только при status=completed)
+         * @enum {string}
+         */
+        QuestOutcome: "succeeded" | "failed" | "abandoned";
+        CompleteQuestRequest: {
+            outcome: components["schemas"]["QuestOutcome"];
+        };
         QuestResponse: {
             id: components["schemas"]["UUID"];
             campaign_id: components["schemas"]["UUID"];
             title: string;
             description: string;
-            is_active: boolean;
+            status: components["schemas"]["QuestStatus"];
+            outcome?: components["schemas"]["QuestOutcome"];
             tags?: string[];
+            /** Format: date-time */
+            activated_at?: string;
+            /** Format: date-time */
+            completed_at?: string;
             /** Format: date-time */
             created_at: string;
         };

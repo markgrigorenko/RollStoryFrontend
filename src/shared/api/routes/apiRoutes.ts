@@ -14,6 +14,8 @@ export const API_ROUTES = {
     characters: (campaignId: string) => `/db/campaign/${campaignId}/character`,
     character: (campaignId: string, characterId: string) =>
       `/db/campaign/${campaignId}/character/${characterId}`,
+    characterGenerate: (campaignId: string) =>
+      `/db/campaign/${campaignId}/character/generate`,
     characterRelation: (campaignId: string) =>
       `/db/campaign/${campaignId}/character/relation`,
     characterCreate: {
@@ -38,6 +40,12 @@ export const API_ROUTES = {
     locationCharacter: (campaignId: string, locationId: string, characterId: string) =>
       `/db/campaign/${campaignId}/location/${locationId}/character/${characterId}`,
     quest: (campaignId: string) => `/db/campaign/${campaignId}/quest`,
+    questById: (campaignId: string, questId: string) =>
+      `/db/campaign/${campaignId}/quest/${questId}`,
+    questActivate: (campaignId: string, questId: string) =>
+      `/db/campaign/${campaignId}/quest/${questId}/activate`,
+    questComplete: (campaignId: string, questId: string) =>
+      `/db/campaign/${campaignId}/quest/${questId}/complete`,
     locationQuest: (campaignId: string, locationId: string, questId: string) =>
       `/db/campaign/${campaignId}/location/${locationId}/quest/${questId}`,
   },

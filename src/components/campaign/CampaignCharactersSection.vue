@@ -3,16 +3,20 @@ import { computed, inject, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import CharacterCreateWizard from '@/components/campaign/CharacterCreateWizard.vue'
+import CharacterGenerateModal from '@/components/campaign/CharacterGenerateModal.vue'
 import CharacterSheetSummaryPanel from '@/components/campaign/CharacterSheetSummaryPanel.vue'
 import notFoundIconUrl from '@/assets/icons/not-found-icon.svg'
 import InlineSectionLoader from '@/shared/ui/InlineSectionLoader.vue'
+import { generateCharacter, HttpError } from '@/shared/api'
 import { campaignLocationsMapBridgeKey } from '@/shared/lib/campaignLocationsMapBridge'
 import {
   findLocationIdByTitle,
   findQuestIdByTitle,
 } from '@/shared/lib/entityNavigation'
+import { useActiveCampaignStore } from '@/stores/activeCampaign'
 import { useCampaignCharactersStore } from '@/stores/campaignCharacters'
 import { useCampaignQuestsStore } from '@/stores/campaignQuests'
+import type { components } from '@/shared/api/generated/schema'
 import {
   createCharacterSheetFromDraft,
   defaultCharacterCreateDraft,
@@ -48,6 +52,11 @@ const viewMode = ref<'browse' | 'create'>('browse')
 const browsePhase = ref<'list' | 'detail'>('list')
 const createDraft = ref<CharacterCreateDraft>(defaultCharacterCreateDraft())
 const lastCreateError = ref<string | null>(null)
+
+const activeCampaignStore = useActiveCampaignStore()
+const showGenerate = ref(false)
+const generating = ref(false)
+const generateError = ref<string | null>(null)
 
 const selectedId = ref<string>('gleff')
 
@@ -214,6 +223,46 @@ function crumbTitle(s: CharacterSheet): string {
   return t.length > 28 ? `${t.slice(0, 27)}…` : t
 }
 
+async function focusCharacter(characterId: string, avatarUrl?: string) {
+  charactersStore.invalidateCharacterDetail(characterId)
+  await charactersStore.loadFromApi()
+  await charactersStore.ensureDetailLoaded(characterId)
+  if (avatarUrl) {
+    charactersStore.setCharacterPortraitUrl(characterId, avatarUrl)
+  }
+  selectedId.value = characterId
+  viewMode.value = 'browse'
+  browsePhase.value = 'detail'
+}
+
+function onOpenGenerate() {
+  generateError.value = null
+  showGenerate.value = true
+}
+
+async function onGenerateSubmit(body: components['schemas']['GenerateCharacterRequest']) {
+  generateError.value = null
+  generating.value = true
+  try {
+    const campaignId = await activeCampaignStore.ensureCampaignId()
+    if (!campaignId) {
+      generateError.value = 'Не удалось определить кампанию.'
+      return
+    }
+    const detail = await generateCharacter(campaignId, body)
+    showGenerate.value = false
+    await focusCharacter(detail.id)
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 422) {
+      generateError.value = 'Генерация не удалась: ответ модели не прошёл проверку. Попробуйте ещё раз.'
+    } else {
+      generateError.value = error instanceof Error ? error.message : 'Не удалось сгенерировать персонажа.'
+    }
+  } finally {
+    generating.value = false
+  }
+}
+
 async function onCreateComplete(payload?: {
   characterId?: string
   avatarUploadError?: string
@@ -222,15 +271,7 @@ async function onCreateComplete(payload?: {
   lastCreateError.value = payload?.avatarUploadError ?? null
 
   if (payload?.characterId) {
-    charactersStore.invalidateCharacterDetail(payload.characterId)
-    await charactersStore.loadFromApi()
-    await charactersStore.ensureDetailLoaded(payload.characterId)
-    if (payload.avatarUrl) {
-      charactersStore.setCharacterPortraitUrl(payload.characterId, payload.avatarUrl)
-    }
-    selectedId.value = payload.characterId
-    viewMode.value = 'browse'
-    browsePhase.value = 'detail'
+    await focusCharacter(payload.characterId, payload.avatarUrl)
     return
   }
 
@@ -272,6 +313,9 @@ async function onCreateComplete(payload?: {
               </svg>
               <input v-model="searchQuery" type="search" class="cc__search" placeholder="Поиск" autocomplete="off" />
             </div>
+            <button type="button" class="cc-cards__generate" @click="onOpenGenerate">
+              Сгенерировать
+            </button>
             <button type="button" class="cc-cards__add" @click="onAddCharacter">
               Добавить<span class="cc-cards__add-plus" aria-hidden="true">+</span>
             </button>
@@ -417,6 +461,9 @@ async function onCreateComplete(payload?: {
             <span class="cc-sheet-rail__add-plus" aria-hidden="true">+</span>
             Добавить персонажа
           </button>
+          <button type="button" class="cc-sheet-rail__generate" @click="onOpenGenerate">
+            Сгенерировать персонажа
+          </button>
           <ul class="cc-sheet-rail__names" aria-label="Имена">
             <li v-for="c in filteredList" :key="c.id" class="cc-sheet-rail__li">
               <button
@@ -505,6 +552,14 @@ async function onCreateComplete(payload?: {
         </div>
       </template>
     </div>
+
+    <CharacterGenerateModal
+      v-if="showGenerate"
+      :submitting="generating"
+      :error="generateError"
+      @submit="onGenerateSubmit"
+      @cancel="showGenerate = false"
+    />
   </div>
 </template>
 
@@ -865,6 +920,42 @@ async function onCreateComplete(payload?: {
   cursor: pointer;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
+}
+
+.cc-cards__generate {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  margin: 0;
+  border: 1px solid #f97316;
+  border-radius: 9999px;
+  background: rgba(249, 115, 22, 0.12);
+  color: #f97316;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cc-cards__generate:hover {
+  background: rgba(249, 115, 22, 0.2);
+}
+
+.cc-sheet-rail__generate {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 6px 12px;
+  margin: 0;
+  border: 1px solid #f97316;
+  border-radius: 8px;
+  background: rgba(249, 115, 22, 0.12);
+  color: #f97316;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cc-sheet-rail__generate:hover {
+  background: rgba(249, 115, 22, 0.2);
 }
 
 .cc-cards__add:hover {
