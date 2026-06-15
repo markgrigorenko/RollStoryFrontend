@@ -344,14 +344,9 @@ paths:
     get:
       summary: Подтверждение email по ссылке из письма
       description: >
-        Публичный эндпоинт. Принимает одноразовый токен из письма
-        подтверждения, активирует пользователя и редиректит на UI.
-
-
-        На успех: 302 на verify_email.success_url.
-
-        На ошибку: 302 на verify_email.error_url?reason=<code>, где code —
-        одно из: empty, not_found, used, expired, internal.
+        Публичный эндпоинт. Фронтовая страница verify дёргает его с токеном из
+        письма и показывает результат. На успех — 200, иначе HTTP-код причины
+        (400 пустой, 403 истёк, 404 не найден, 409 использован) + ErrorResponse.
       tags:
         - Auth
       parameters:
@@ -362,13 +357,62 @@ paths:
           schema:
             type: string
       responses:
-        "302":
-          description: Редирект на UI (успех или ошибка с reason в query)
-          headers:
-            Location:
+        "200":
+          description: Email подтверждён
+          content:
+            application/json:
               schema:
-                type: string
-              description: URL для редиректа
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          description: Пустой токен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Токен истёк
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Токен не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Токен уже использован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/resend-verification:
+    post:
+      summary: Переотправка письма подтверждения email
+      description: >
+        Принимает email+password как «лёгкую авторизацию». Если пара верна и
+        пользователь не активирован — старые токены гасятся, генерится новый и
+        уходит письмо. Ответ всегда нейтральный (204), чтобы нельзя было
+        перечислять пользователей/состояния.
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendVerificationRequest"
+      responses:
+        "204":
+          description: Принято (письмо отправлено, если пара верна и не активирован)
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -1395,6 +1439,11 @@ components:
         error:
           type: string
           example: "Internal server error"
+        reason:
+          type: string
+          description: >
+            Машиночитаемый код, когда фронту нужно отличить причину. Например
+            login при верных кредах, но неподтверждённом email → "email_not_verified".
 
     UploadFileResponse:
       type: object
@@ -1433,6 +1482,27 @@ components:
           description: Пароль пользователя
           format: password
           minLength: 8
+        locale:
+          type: string
+          description: Язык письма подтверждения (по умолчанию ru)
+          enum: [ru, en]
+
+    ResendVerificationRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        locale:
+          type: string
+          description: Язык письма подтверждения (по умолчанию ru)
+          enum: [ru, en]
 
     LoginRequest:
       type: object
@@ -1465,12 +1535,6 @@ components:
       properties:
         userId:
           $ref: "#/components/schemas/UUID"
-        verification_token:
-          type: string
-          description: >
-            Сырой токен подтверждения email. Возвращается ВРЕМЕННО, пока не
-            подключена реальная отправка письма (issue #29). После подключения
-            SMTP это поле будет удалено из ответа.
 
     LoginResponse:
       type: object
@@ -2381,7 +2445,8 @@ components:
 
     LocationResponse:
       type: object
-      required: [id, campaign_id, title, x, y, created_by, created_at, updated_at]
+      required:
+        [id, campaign_id, title, x, y, created_by, created_at, updated_at]
       properties:
         id:
           $ref: "#/components/schemas/UUID"

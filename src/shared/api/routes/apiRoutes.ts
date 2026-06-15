@@ -5,6 +5,7 @@ export const API_ROUTES = {
     login: '/auth/login',
     refresh: '/auth/refresh',
     verifyEmail: '/auth/verify-email',
+    resendVerification: '/auth/resend-verification',
   },
   db: {
     campaign: '/db/campaign',
