@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."  # repo root (где лежит docker-compose.yaml)
 
 if [ -z "${IMAGE_TAG:-}" ]; then
-    IMAGE_TAG=$(docker inspect rollstory-frontend \
+    IMAGE_TAG=$(docker inspect rollstory-frontend-prod \
         --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
         2>/dev/null || true)
 

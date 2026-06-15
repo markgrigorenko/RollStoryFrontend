@@ -10,13 +10,13 @@
 # Сети:
 #   proxy-network (rollstory-net) — external, шарится с rollstory-proxy и
 #                                   rollstory-backend. Через неё outer-nginx
-#                                   достаёт http://rollstory-frontend:80,
+#                                   достаёт http://rollstory-frontend-prod:80,
 #                                   а внутренний nginx — http://rollstory-server:8080.
 
 services:
   frontend:
     image: ${REGISTRY_URL}/rollstory-frontend:${IMAGE_TAG:?IMAGE_TAG must be set (git SHA, выставляется CI)}
-    container_name: rollstory-frontend
+    container_name: rollstory-frontend-prod
     restart: unless-stopped
     networks:
       - proxy-network
